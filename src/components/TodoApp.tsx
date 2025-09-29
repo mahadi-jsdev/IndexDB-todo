@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, Play, CheckCircle, Clock } from 'lucide-react';
+import { Plus, Trash2, Play, CheckCircle, Clock, ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 interface TodoItem {
   id: string;
@@ -13,11 +14,14 @@ interface TodoItem {
   status: 'todo' | 'ongoing' | 'done';
   createdAt: Date;
   ongoingStartTime?: Date;
+  image?: string;
 }
 
 const TodoApp = () => {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [newTodo, setNewTodo] = useState('');
+  const [isPastingImage, setIsPastingImage] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const savedTodos = localStorage.getItem('todos');
@@ -35,8 +39,54 @@ const TodoApp = () => {
     localStorage.setItem('todos', JSON.stringify(todos));
   }, [todos]);
 
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        setIsPastingImage(true);
+        
+        const blob = item.getAsFile();
+        if (blob) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const imageDataUrl = event.target?.result as string;
+            
+            // Add todo with image
+            const text = newTodo.trim() || 'Image todo';
+            let status: 'todo' | 'ongoing' | 'done' = 'todo';
+
+            if (text.toLowerCase().startsWith('going ')) {
+              status = 'ongoing';
+            } else if (text.toLowerCase().startsWith('done ')) {
+              status = 'done';
+            }
+
+            const todo: TodoItem = {
+              id: Date.now().toString(),
+              text: text.replace(/^(going|done)\s+/i, ''),
+              status,
+              createdAt: new Date(),
+              image: imageDataUrl
+            };
+
+            setTodos([...todos, todo]);
+            setNewTodo('');
+            setIsPastingImage(false);
+            toast.success('Image todo added!');
+          };
+          reader.readAsDataURL(blob);
+        }
+        break;
+      }
+    }
+  };
+
   const addTodo = () => {
-    if (!newTodo.trim()) return;
+    if (!newTodo.trim() && !isPastingImage) return;
 
     const text = newTodo.trim();
     let status: 'todo' | 'ongoing' | 'done' = 'todo';
@@ -145,15 +195,30 @@ const TodoApp = () => {
 
         {/* Add Todo Input */}
         <div className="flex gap-2 mb-8">
-          <Input
-            value={newTodo}
-            onChange={(e) => setNewTodo(e.target.value)}
-            placeholder="Type your todo... (start with 'going' or 'done' to auto-categorize)"
-            className="flex-1"
-            onKeyPress={(e) => e.key === 'Enter' && addTodo()}
-          />
-          <Button onClick={addTodo} className="bg-purple-600 hover:bg-purple-700">
-            <Plus className="w-4 h-4 mr-2" />
+          <div className="flex-1 relative">
+            <Input
+              ref={inputRef}
+              value={newTodo}
+              onChange={(e) => setNewTodo(e.target.value)}
+              placeholder="Type your todo or paste an image (Ctrl+V)..."
+              className="pr-10"
+              onKeyPress={(e) => e.key === 'Enter' && addTodo()}
+              onPaste={handlePaste}
+            />
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+              <ImageIcon className="w-4 h-4 text-gray-400" />
+            </div>
+          </div>
+          <Button 
+            onClick={addTodo} 
+            className="bg-purple-600 hover:bg-purple-700"
+            disabled={isPastingImage}
+          >
+            {isPastingImage ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+            ) : (
+              <Plus className="w-4 h-4 mr-2" />
+            )}
             Add
           </Button>
         </div>
@@ -171,6 +236,17 @@ const TodoApp = () => {
             <CardContent className="p-4 space-y-3">
               {filteredTodos('todo').map(todo => (
                 <div key={todo.id} className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
+                  {todo.image && (
+                    <div className="mb-2">
+                      <Image
+                        src={todo.image}
+                        alt="Todo image"
+                        width={200}
+                        height={150}
+                        className="w-full h-32 object-cover rounded-md"
+                      />
+                    </div>
+                  )}
                   <p className="text-sm font-medium">{todo.text}</p>
                   <div className="flex gap-2 mt-2">
                     <Button size="sm" onClick={() => updateStatus(todo.id, 'ongoing')} className="bg-yellow-500 hover:bg-yellow-600">
@@ -197,6 +273,17 @@ const TodoApp = () => {
             <CardContent className="p-4 space-y-3">
               {filteredTodos('ongoing').map(todo => (
                 <div key={todo.id} className="bg-white p-3 rounded-lg border border-yellow-200 shadow-sm">
+                  {todo.image && (
+                    <div className="mb-2">
+                      <Image
+                        src={todo.image}
+                        alt="Todo image"
+                        width={200}
+                        height={150}
+                        className="w-full h-32 object-cover rounded-md"
+                      />
+                    </div>
+                  )}
                   <p className="text-sm font-medium">{todo.text}</p>
                   {todo.ongoingStartTime && (
                     <div className="flex items-center gap-1 mt-1 text-xs text-yellow-600">
@@ -229,6 +316,17 @@ const TodoApp = () => {
             <CardContent className="p-4 space-y-3">
               {filteredTodos('done').map(todo => (
                 <div key={todo.id} className="bg-white p-3 rounded-lg border border-green-200 shadow-sm">
+                  {todo.image && (
+                    <div className="mb-2">
+                      <Image
+                        src={todo.image}
+                        alt="Todo image"
+                        width={200}
+                        height={150}
+                        className="w-full h-32 object-cover rounded-md"
+                      />
+                    </div>
+                  )}
                   <p className="text-sm font-medium text-green-600">{todo.text}</p>
                   <div className="flex gap-2 mt-2">
                     <Button size="sm" onClick={() => updateStatus(todo.id, 'todo')} className="bg-blue-500 hover:bg-blue-600">
