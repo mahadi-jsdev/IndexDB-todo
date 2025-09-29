@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, Play, CheckCircle, Clock, ImageIcon } from 'lucide-react';
+import { Plus, Trash2, Play, CheckCircle, Clock, ImageIcon, X } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
 
@@ -21,6 +21,7 @@ const TodoApp = () => {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [newTodo, setNewTodo] = useState('');
   const [isPastingImage, setIsPastingImage] = useState(false);
+  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -237,7 +238,10 @@ const TodoApp = () => {
               {filteredTodos('todo').map(todo => (
                 <div key={todo.id} className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
                   {todo.image && (
-                    <div className="mb-2">
+                    <div 
+                      className="mb-2 cursor-pointer"
+                      onClick={() => setFullscreenImage(todo.image!)}
+                    >
                       <Image
                         src={todo.image}
                         alt="Todo image"
@@ -274,7 +278,10 @@ const TodoApp = () => {
               {filteredTodos('ongoing').map(todo => (
                 <div key={todo.id} className="bg-white p-3 rounded-lg border border-yellow-200 shadow-sm">
                   {todo.image && (
-                    <div className="mb-2">
+                    <div 
+                      className="mb-2 cursor-pointer"
+                      onClick={() => setFullscreenImage(todo.image!)}
+                    >
                       <Image
                         src={todo.image}
                         alt="Todo image"
@@ -317,7 +324,10 @@ const TodoApp = () => {
               {filteredTodos('done').map(todo => (
                 <div key={todo.id} className="bg-white p-3 rounded-lg border border-green-200 shadow-sm">
                   {todo.image && (
-                    <div className="mb-2">
+                    <div 
+                      className="mb-2 cursor-pointer"
+                      onClick={() => setFullscreenImage(todo.image!)}
+                    >
                       <Image
                         src={todo.image}
                         alt="Todo image"
@@ -343,6 +353,30 @@ const TodoApp = () => {
           </Card>
         </div>
       </div>
+
+      {/* Fullscreen Image Modal */}
+      {fullscreenImage && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
+          onClick={() => setFullscreenImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-full">
+            <button 
+              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-75 transition-all"
+              onClick={() => setFullscreenImage(null)}
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <Image
+              src={fullscreenImage}
+              alt="Fullscreen view"
+              width={800}
+              height={600}
+              className="max-w-full max-h-[90vh] object-contain"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
