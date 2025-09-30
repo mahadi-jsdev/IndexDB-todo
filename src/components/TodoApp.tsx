@@ -413,7 +413,7 @@ const TodoApp = () => {
                 To Do ({filteredTodos('todo').length})
               </CardTitle>
             </CardHeader>
-            <ScrollArea className="h-[400px] rounded-md border">
+            <ScrollArea className="h-[800px] rounded-md border">
               <CardContent className="p-4 space-y-3">
                 {filteredTodos('todo').map(todo => (
                   <div key={todo.id} className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
