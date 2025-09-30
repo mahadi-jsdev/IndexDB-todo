@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, Trash2, Play, CheckCircle, Clock, ImageIcon, X, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'; // Import ScrollArea and ScrollBar
 
 interface TodoItem {
   id: string;
@@ -412,65 +413,68 @@ const TodoApp = () => {
                 To Do ({filteredTodos('todo').length})
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-4 space-y-3">
-              {filteredTodos('todo').map(todo => (
-                <div key={todo.id} className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
-                  {todo.image && (
-                    <div 
-                      className="mb-2 cursor-pointer"
-                      onClick={() => setFullscreenImage(todo.image!)}
-                    >
-                      <Image
-                        src={todo.image}
-                        alt="Todo image"
-                        width={200}
-                        height={150}
-                        className="w-full h-32 object-cover rounded-md"
-                      />
-                    </div>
-                  )}
-                  <p className="text-sm font-medium">{todo.text}</p>
-                  
-                  {/* Tags for todo */}
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {(todo.tags || []).map(tag => (
-                      <span 
-                        key={tag} 
-                        className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center"
+            <ScrollArea className="h-[400px] rounded-md border">
+              <CardContent className="p-4 space-y-3">
+                {filteredTodos('todo').map(todo => (
+                  <div key={todo.id} className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
+                    {todo.image && (
+                      <div 
+                        className="mb-2 cursor-pointer"
+                        onClick={() => setFullscreenImage(todo.image!)}
                       >
-                        {tag}
-                        <X 
-                          className="w-3 h-3 ml-1 cursor-pointer" 
-                          onClick={() => removeTagFromTodo(todo.id, tag)} 
+                        <Image
+                          src={todo.image}
+                          alt="Todo image"
+                          width={200}
+                          height={150}
+                          className="w-full h-32 object-cover rounded-md"
                         />
-                      </span>
-                    ))}
-                    {tags && tags.filter(t => !(todo.tags || []).includes(t)).length > 0 && (
-                      <select 
-                        className="text-xs border rounded px-1"
-                        onChange={(e) => addTagToTodo(todo.id, e.target.value)}
-                        value=""
-                      >
-                        <option value="">Add tag...</option>
-                        {tags.filter(t => !(todo.tags || []).includes(t)).map(tag => (
-                          <option key={tag} value={tag}>{tag}</option>
-                        ))}
-                      </select>
+                      </div>
                     )}
+                    <p className="text-sm font-medium">{todo.text}</p>
+                    
+                    {/* Tags for todo */}
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {(todo.tags || []).map(tag => (
+                        <span 
+                          key={tag} 
+                          className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center"
+                        >
+                          {tag}
+                          <X 
+                            className="w-3 h-3 ml-1 cursor-pointer" 
+                            onClick={() => removeTagFromTodo(todo.id, tag)} 
+                          />
+                        </span>
+                      ))}
+                      {tags && tags.filter(t => !(todo.tags || []).includes(t)).length > 0 && (
+                        <select 
+                          className="text-xs border rounded px-1"
+                          onChange={(e) => addTagToTodo(todo.id, e.target.value)}
+                          value=""
+                        >
+                          <option value="">Add tag...</option>
+                          {tags.filter(t => !(todo.tags || []).includes(t)).map(tag => (
+                            <option key={tag} value={tag}>{tag}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    
+                    <div className="flex gap-2 mt-2">
+                      <Button size="sm" onClick={() => updateStatus(todo.id, 'ongoing')} className="bg-yellow-500 hover:bg-yellow-600">
+                        <Play className="w-3 h-3 mr-1" />
+                        Start
+                      </Button>
+                      <Button size="sm" onClick={() => deleteTodo(todo.id)} variant="destructive">
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
                   </div>
-                  
-                  <div className="flex gap-2 mt-2">
-                    <Button size="sm" onClick={() => updateStatus(todo.id, 'ongoing')} className="bg-yellow-500 hover:bg-yellow-600">
-                      <Play className="w-3 h-3 mr-1" />
-                      Start
-                    </Button>
-                    <Button size="sm" onClick={() => deleteTodo(todo.id)} variant="destructive">
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
+                ))}
+              </CardContent>
+              <ScrollBar orientation="vertical" />
+            </ScrollArea>
           </Card>
 
           {/* Ongoing Column */}
@@ -481,71 +485,74 @@ const TodoApp = () => {
                 Ongoing ({filteredTodos('ongoing').length})
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-4 space-y-3">
-              {filteredTodos('ongoing').map(todo => (
-                <div key={todo.id} className="bg-white p-3 rounded-lg border border-yellow-200 shadow-sm">
-                  {todo.image && (
-                    <div 
-                      className="mb-2 cursor-pointer"
-                      onClick={() => setFullscreenImage(todo.image!)}
-                    >
-                      <Image
-                        src={todo.image}
-                        alt="Todo image"
-                        width={200}
-                        height={150}
-                        className="w-full h-32 object-cover rounded-md"
-                      />
-                    </div>
-                  )}
-                  <p className="text-sm font-medium">{todo.text}</p>
-                  
-                  {/* Tags for ongoing */}
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {(todo.tags || []).map(tag => (
-                      <span 
-                        key={tag} 
-                        className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full flex items-center"
+            <ScrollArea className="h-[400px] rounded-md border">
+              <CardContent className="p-4 space-y-3">
+                {filteredTodos('ongoing').map(todo => (
+                  <div key={todo.id} className="bg-white p-3 rounded-lg border border-yellow-200 shadow-sm">
+                    {todo.image && (
+                      <div 
+                        className="mb-2 cursor-pointer"
+                        onClick={() => setFullscreenImage(todo.image!)}
                       >
-                        {tag}
-                        <X 
-                          className="w-3 h-3 ml-1 cursor-pointer" 
-                          onClick={() => removeTagFromTodo(todo.id, tag)} 
+                        <Image
+                          src={todo.image}
+                          alt="Todo image"
+                          width={200}
+                          height={150}
+                          className="w-full h-32 object-cover rounded-md"
                         />
-                      </span>
-                    ))}
-                    {tags && tags.filter(t => !(todo.tags || []).includes(t)).length > 0 && (
-                      <select 
-                        className="text-xs border rounded px-1"
-                        onChange={(e) => addTagToTodo(todo.id, e.target.value)}
-                        value=""
-                      >
-                        <option value="">Add tag...</option>
-                        {tags.filter(t => !(todo.tags || []).includes(t)).map(tag => (
-                          <option key={tag} value={tag}>{tag}</option>
-                        ))}
-                      </select>
+                      </div>
                     )}
-                  </div>
-                  
-                  {todo.ongoingStartTime && (
-                    <div className="flex items-center gap-1 mt-1 text-xs text-yellow-600">
-                      <Clock className="w-3 h-3" />
-                      <span>{getElapsedTime(todo.ongoingStartTime)}</span>
+                    <p className="text-sm font-medium">{todo.text}</p>
+                    
+                    {/* Tags for ongoing */}
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {(todo.tags || []).map(tag => (
+                        <span 
+                          key={tag} 
+                          className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full flex items-center"
+                        >
+                          {tag}
+                          <X 
+                            className="w-3 h-3 ml-1 cursor-pointer" 
+                            onClick={() => removeTagFromTodo(todo.id, tag)} 
+                          />
+                        </span>
+                      ))}
+                      {tags && tags.filter(t => !(todo.tags || []).includes(t)).length > 0 && (
+                        <select 
+                          className="text-xs border rounded px-1"
+                          onChange={(e) => addTagToTodo(todo.id, e.target.value)}
+                          value=""
+                        >
+                          <option value="">Add tag...</option>
+                          {tags.filter(t => !(todo.tags || []).includes(t)).map(tag => (
+                            <option key={tag} value={tag}>{tag}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
-                  )}
-                  <div className="flex gap-2 mt-2">
-                    <Button size="sm" onClick={() => updateStatus(todo.id, 'done')} className="bg-green-500 hover:bg-green-600">
-                      <CheckCircle className="w-3 h-3 mr-1" />
-                      Complete
-                    </Button>
-                    <Button size="sm" onClick={() => deleteTodo(todo.id)} variant="destructive">
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
+                    
+                    {todo.ongoingStartTime && (
+                      <div className="flex items-center gap-1 mt-1 text-xs text-yellow-600">
+                        <Clock className="w-3 h-3" />
+                        <span>{getElapsedTime(todo.ongoingStartTime)}</span>
+                      </div>
+                    )}
+                    <div className="flex gap-2 mt-2">
+                      <Button size="sm" onClick={() => updateStatus(todo.id, 'done')} className="bg-green-500 hover:bg-green-600">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Complete
+                      </Button>
+                      <Button size="sm" onClick={() => deleteTodo(todo.id)} variant="destructive">
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </CardContent>
+                ))}
+              </CardContent>
+              <ScrollBar orientation="vertical" />
+            </ScrollArea>
           </Card>
 
           {/* Done Column */}
@@ -556,71 +563,74 @@ const TodoApp = () => {
                 Done ({filteredTodos('done').length})
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-4 space-y-3">
-              {filteredTodos('done').map(todo => (
-                <div key={todo.id} className="bg-white p-3 rounded-lg border border-green-200 shadow-sm">
-                  {todo.image && (
-                    <div 
-                      className="mb-2 cursor-pointer"
-                      onClick={() => setFullscreenImage(todo.image!)}
-                    >
-                      <Image
-                        src={todo.image}
-                        alt="Todo image"
-                        width={200}
-                        height={150}
-                        className="w-full h-32 object-cover rounded-md"
-                      />
-                    </div>
-                  )}
-                  <p className="text-sm font-medium text-green-600">{todo.text}</p>
-                  
-                  {/* Tags for done */}
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {(todo.tags || []).map(tag => (
-                      <span 
-                        key={tag} 
-                        className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center"
+            <ScrollArea className="h-[400px] rounded-md border">
+              <CardContent className="p-4 space-y-3">
+                {filteredTodos('done').map(todo => (
+                  <div key={todo.id} className="bg-white p-3 rounded-lg border border-green-200 shadow-sm">
+                    {todo.image && (
+                      <div 
+                        className="mb-2 cursor-pointer"
+                        onClick={() => setFullscreenImage(todo.image!)}
                       >
-                        {tag}
-                        <X 
-                          className="w-3 h-3 ml-1 cursor-pointer" 
-                          onClick={() => removeTagFromTodo(todo.id, tag)} 
+                        <Image
+                          src={todo.image}
+                          alt="Todo image"
+                          width={200}
+                          height={150}
+                          className="w-full h-32 object-cover rounded-md"
                         />
-                      </span>
-                    ))}
-                    {tags && tags.filter(t => !(todo.tags || []).includes(t)).length > 0 && (
-                      <select 
-                        className="text-xs border rounded px-1"
-                        onChange={(e) => addTagToTodo(todo.id, e.target.value)}
-                        value=""
-                      >
-                        <option value="">Add tag...</option>
-                        {tags.filter(t => !(todo.tags || []).includes(t)).map(tag => (
-                          <option key={tag} value={tag}>{tag}</option>
-                        ))}
-                      </select>
+                      </div>
                     )}
-                  </div>
-                  
-                  {todo.completedAt && (
-                    <div className="text-xs text-green-600 mt-1">
-                      {getCompletionTime(todo.completedAt)}
+                    <p className="text-sm font-medium text-green-600">{todo.text}</p>
+                    
+                    {/* Tags for done */}
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {(todo.tags || []).map(tag => (
+                        <span 
+                          key={tag} 
+                          className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center"
+                        >
+                          {tag}
+                          <X 
+                            className="w-3 h-3 ml-1 cursor-pointer" 
+                            onClick={() => removeTagFromTodo(todo.id, tag)} 
+                          />
+                        </span>
+                      ))}
+                      {tags && tags.filter(t => !(todo.tags || []).includes(t)).length > 0 && (
+                        <select 
+                          className="text-xs border rounded px-1"
+                          onChange={(e) => addTagToTodo(todo.id, e.target.value)}
+                          value=""
+                        >
+                          <option value="">Add tag...</option>
+                          {tags.filter(t => !(todo.tags || []).includes(t)).map(tag => (
+                            <option key={tag} value={tag}>{tag}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
-                  )}
-                  
-                  <div className="flex gap-2 mt-2">
-                    <Button size="sm" onClick={() => updateStatus(todo.id, 'todo')} className="bg-blue-500 hover:bg-blue-600">
-                      <Plus className="w-3 h-3 mr-1" />
-                      Reopen
-                    </Button>
-                    <Button size="sm" onClick={() => deleteTodo(todo.id)} variant="destructive">
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
+                    
+                    {todo.completedAt && (
+                      <div className="text-xs text-green-600 mt-1">
+                        {getCompletionTime(todo.completedAt)}
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-2 mt-2">
+                      <Button size="sm" onClick={() => updateStatus(todo.id, 'todo')} className="bg-blue-500 hover:bg-blue-600">
+                        <Plus className="w-3 h-3 mr-1" />
+                        Reopen
+                      </Button>
+                      <Button size="sm" onClick={() => deleteTodo(todo.id)} variant="destructive">
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </CardContent>
+                ))}
+              </CardContent>
+              <ScrollBar orientation="vertical" />
+            </ScrollArea>
           </Card>
         </div>
       </div>
