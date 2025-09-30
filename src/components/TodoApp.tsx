@@ -17,7 +17,7 @@ interface TodoItem {
   ongoingStartTime?: Date;
   completedAt?: Date;
   image?: string;
-  tags: string[];
+  tag?: string; // Changed from tags: string[] to a single optional tag
 }
 
 const TodoApp = () => {
@@ -40,10 +40,10 @@ const TodoApp = () => {
           createdAt: new Date(todo.createdAt),
           ongoingStartTime: todo.ongoingStartTime ? new Date(todo.ongoingStartTime) : undefined,
           completedAt: todo.completedAt ? new Date(todo.completedAt) : undefined,
-          tags: todo.tags || []
+          tag: todo.tag || undefined // Ensure tag is correctly loaded
         }));
         setTodos(parsedTodos);
-      } catch (error: any) { // Fixed syntax: catch (error: any)
+      } catch (error: any) {
         console.error('Error parsing todos:', error);
         setTodos([]);
       }
@@ -53,7 +53,7 @@ const TodoApp = () => {
     if (savedTags) {
       try {
         setTags(JSON.parse(savedTags));
-      } catch (error: any) { // Fixed syntax: catch (error: any)
+      } catch (error: any) {
         console.error('Error parsing tags:', error);
         setTags([]);
       }
@@ -101,7 +101,7 @@ const TodoApp = () => {
               status,
               createdAt: new Date(),
               image: imageDataUrl,
-              tags: []
+              tag: undefined // Initialize with no tag
             };
 
             setTodos([...todos, todo]);
@@ -135,7 +135,7 @@ const TodoApp = () => {
       text: text.replace(/^(plan|going|done)\s+/i, ''),
       status,
       createdAt: new Date(),
-      tags: []
+      tag: undefined // Initialize with no tag
     };
 
     setTodos([...todos, todo]);
@@ -144,7 +144,7 @@ const TodoApp = () => {
   };
 
   const updateStatus = (id: string, newStatus: 'todo' | 'planned' | 'ongoing' | 'done') => {
-    setTodos(todos.map((todo: TodoItem) => { // Explicitly typed todo
+    setTodos(todos.map((todo: TodoItem) => {
       if (todo.id === id) {
         const updatedTodo = { ...todo, status: newStatus };
         
@@ -172,7 +172,7 @@ const TodoApp = () => {
   };
 
   const deleteTodo = (id: string) => {
-    setTodos(todos.filter((todo: TodoItem) => todo.id !== id)); // Explicitly typed todo
+    setTodos(todos.filter((todo: TodoItem) => todo.id !== id));
     toast.error('Todo deleted!');
   };
 
@@ -217,10 +217,10 @@ const TodoApp = () => {
   const filteredTodos = (status: 'todo' | 'planned' | 'ongoing' | 'done') => {
     if (!todos || !Array.isArray(todos)) return [];
     
-    return todos.filter((todo: TodoItem) => { // Explicitly typed todo
+    return todos.filter((todo: TodoItem) => {
       if (!todo) return false;
       const statusMatch = todo.status === status;
-      const tagMatch = selectedTag ? (todo.tags || []).includes(selectedTag) : true;
+      const tagMatch = selectedTag ? todo.tag === selectedTag : true; // Updated for single tag
       return statusMatch && tagMatch;
     });
   };
@@ -241,35 +241,36 @@ const TodoApp = () => {
     }
   };
 
-  const removeTag = (tag: string) => {
-    if (window.confirm(`Are you sure you want to delete the tag "${tag}"? This will remove it from all todos.`)) {
-      setTags(tags.filter((t: string) => t !== tag)); // Explicitly typed t
-      setTodos(todos.map((todo: TodoItem) => ({ // Explicitly typed todo
+  const removeTag = (tagToRemove: string) => { // Renamed parameter to avoid conflict
+    if (window.confirm(`Are you sure you want to delete the tag "${tagToRemove}"? This will remove it from all todos.`)) {
+      setTags(tags.filter((t: string) => t !== tagToRemove));
+      // Remove tag from all todos that have it
+      setTodos(todos.map((todo: TodoItem) => ({
         ...todo,
-        tags: (todo.tags || []).filter((t: string) => t !== tag) // Explicitly typed t
+        tag: todo.tag === tagToRemove ? undefined : todo.tag // Set to undefined if it matches
       })));
-      toast.success(`Tag "${tag}" deleted!`);
+      toast.success(`Tag "${tagToRemove}" deleted!`);
     }
   };
 
-  const addTagToTodo = (todoId: string, tag: string) => {
-    setTodos(todos.map((todo: TodoItem) => { // Explicitly typed todo
-      if (todo.id === todoId && !(todo.tags || []).includes(tag)) {
-        return { ...todo, tags: [...(todo.tags || []), tag] };
+  const addTagToTodo = (todoId: string, tagToAdd: string) => { // Renamed parameter
+    setTodos(todos.map((todo: TodoItem) => {
+      if (todo.id === todoId) {
+        return { ...todo, tag: tagToAdd }; // Assign the new tag
       }
       return todo;
     }));
-    toast.success(`Tag "${tag}" added to todo!`);
+    toast.success(`Tag "${tagToAdd}" added to todo!`);
   };
 
-  const removeTagFromTodo = (todoId: string, tag: string) => {
-    setTodos(todos.map((todo: TodoItem) => { // Explicitly typed todo
+  const removeTagFromTodo = (todoId: string) => { // No need for tag parameter, just clear it
+    setTodos(todos.map((todo: TodoItem) => {
       if (todo.id === todoId) {
-        return { ...todo, tags: (todo.tags || []).filter((t: string) => t !== tag) }; // Explicitly typed t
+        return { ...todo, tag: undefined }; // Clear the tag
       }
       return todo;
     }));
-    toast.success(`Tag "${tag}" removed from todo!`);
+    toast.success(`Tag removed from todo!`);
   };
 
   const getCompletionTime = (completedAt?: Date): string => {
@@ -278,7 +279,7 @@ const TodoApp = () => {
   };
 
   const getTagUsageCount = (tag: string): number => {
-    return todos.filter((todo: TodoItem) => (todo.tags || []).includes(tag)).length; // Explicitly typed todo
+    return todos.filter((todo: TodoItem) => todo.tag === tag).length; // Updated for single tag
   };
 
   return (
@@ -338,7 +339,7 @@ const TodoApp = () => {
                 <p className="text-gray-500 text-sm">No tags created yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {tags.map((tag: string) => ( // Explicitly typed tag
+                  {tags.map((tag: string) => (
                     <div key={tag} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                       <div className="flex items-center gap-2">
                         <Tag className="w-4 h-4 text-gray-600" />
@@ -372,7 +373,7 @@ const TodoApp = () => {
             >
               All
             </Button>
-            {tags && tags.map((tag: string) => ( // Explicitly typed tag
+            {tags && tags.map((tag: string) => (
               <Button
                 key={tag}
                 variant={selectedTag === tag ? "default" : "outline"}
@@ -413,7 +414,7 @@ const TodoApp = () => {
             </CardHeader>
             <ScrollArea className="h-[400px] rounded-md border">
               <CardContent className="p-4 space-y-3">
-                {filteredTodos('todo').map((todo: TodoItem) => ( // Explicitly typed todo
+                {filteredTodos('todo').map((todo: TodoItem) => (
                   <div key={todo.id} className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
                     {todo.image && (
                       <div 
@@ -433,26 +434,26 @@ const TodoApp = () => {
                     
                     {/* Tags for todo */}
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {(todo.tags || []).map((tag: string) => ( // Explicitly typed tag
+                      {todo.tag && ( // Only show if tag exists
                         <span 
-                          key={tag} 
+                          key={todo.tag} 
                           className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center"
                         >
-                          {tag}
+                          {todo.tag}
                           <X 
                             className="w-3 h-3 ml-1 cursor-pointer" 
-                            onClick={() => removeTagFromTodo(todo.id, tag)} 
+                            onClick={() => removeTagFromTodo(todo.id)} 
                           />
                         </span>
-                      ))}
-                      {tags && tags.filter((t: string) => !(todo.tags || []).includes(t)).length > 0 && ( // Explicitly typed t
+                      )}
+                      {!todo.tag && tags.length > 0 && ( // Only show dropdown if no tag and tags exist
                         <select 
                           className="text-xs border rounded px-1"
                           onChange={(e) => addTagToTodo(todo.id, e.target.value)}
                           value=""
                         >
                           <option value="">Add tag...</option>
-                          {tags.filter((t: string) => !(todo.tags || []).includes(t)).map((tag: string) => ( // Explicitly typed t and tag
+                          {tags.map((tag: string) => (
                             <option key={tag} value={tag}>{tag}</option>
                           ))}
                         </select>
@@ -485,7 +486,7 @@ const TodoApp = () => {
             </CardHeader>
             <ScrollArea className="h-[400px] rounded-md border">
               <CardContent className="p-4 space-y-3">
-                {filteredTodos('planned').map((todo: TodoItem) => ( // Explicitly typed todo
+                {filteredTodos('planned').map((todo: TodoItem) => (
                   <div key={todo.id} className="bg-white p-3 rounded-lg border border-purple-200 shadow-sm">
                     {todo.image && (
                       <div 
@@ -505,26 +506,26 @@ const TodoApp = () => {
                     
                     {/* Tags for planned */}
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {(todo.tags || []).map((tag: string) => ( // Explicitly typed tag
+                      {todo.tag && ( // Only show if tag exists
                         <span 
-                          key={tag} 
+                          key={todo.tag} 
                           className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full flex items-center"
                         >
-                          {tag}
+                          {todo.tag}
                           <X 
                             className="w-3 h-3 ml-1 cursor-pointer" 
-                            onClick={() => removeTagFromTodo(todo.id, tag)} 
+                            onClick={() => removeTagFromTodo(todo.id)} 
                           />
                         </span>
-                      ))}
-                      {tags && tags.filter((t: string) => !(todo.tags || []).includes(t)).length > 0 && ( // Explicitly typed t
+                      )}
+                      {!todo.tag && tags.length > 0 && ( // Only show dropdown if no tag and tags exist
                         <select 
                           className="text-xs border rounded px-1"
                           onChange={(e) => addTagToTodo(todo.id, e.target.value)}
                           value=""
                         >
                           <option value="">Add tag...</option>
-                          {tags.filter((t: string) => !(todo.tags || []).includes(t)).map((tag: string) => ( // Explicitly typed t and tag
+                          {tags.map((tag: string) => (
                             <option key={tag} value={tag}>{tag}</option>
                           ))}
                         </select>
@@ -561,7 +562,7 @@ const TodoApp = () => {
             </CardHeader>
             <ScrollArea className="h-[400px] rounded-md border">
               <CardContent className="p-4 space-y-3">
-                {filteredTodos('ongoing').map((todo: TodoItem) => ( // Explicitly typed todo
+                {filteredTodos('ongoing').map((todo: TodoItem) => (
                   <div key={todo.id} className="bg-white p-3 rounded-lg border border-yellow-200 shadow-sm">
                     {todo.image && (
                       <div 
@@ -581,26 +582,26 @@ const TodoApp = () => {
                     
                     {/* Tags for ongoing */}
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {(todo.tags || []).map((tag: string) => ( // Explicitly typed tag
+                      {todo.tag && ( // Only show if tag exists
                         <span 
-                          key={tag} 
+                          key={todo.tag} 
                           className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full flex items-center"
                         >
-                          {tag}
+                          {todo.tag}
                           <X 
                             className="w-3 h-3 ml-1 cursor-pointer" 
-                            onClick={() => removeTagFromTodo(todo.id, tag)} 
+                            onClick={() => removeTagFromTodo(todo.id)} 
                           />
                         </span>
-                      ))}
-                      {tags && tags.filter((t: string) => !(todo.tags || []).includes(t)).length > 0 && ( // Explicitly typed t
+                      )}
+                      {!todo.tag && tags.length > 0 && ( // Only show dropdown if no tag and tags exist
                         <select 
                           className="text-xs border rounded px-1"
                           onChange={(e) => addTagToTodo(todo.id, e.target.value)}
                           value=""
                         >
                           <option value="">Add tag...</option>
-                          {tags.filter((t: string) => !(todo.tags || []).includes(t)).map((tag: string) => ( // Explicitly typed t and tag
+                          {tags.map((tag: string) => (
                             <option key={tag} value={tag}>{tag}</option>
                           ))}
                         </select>
@@ -643,7 +644,7 @@ const TodoApp = () => {
             </CardHeader>
             <ScrollArea className="h-[400px] rounded-md border">
               <CardContent className="p-4 space-y-3">
-                {filteredTodos('done').map((todo: TodoItem) => ( // Explicitly typed todo
+                {filteredTodos('done').map((todo: TodoItem) => (
                   <div key={todo.id} className="bg-white p-3 rounded-lg border border-green-200 shadow-sm">
                     {todo.image && (
                       <div 
@@ -663,26 +664,26 @@ const TodoApp = () => {
                     
                     {/* Tags for done */}
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {(todo.tags || []).map((tag: string) => ( // Explicitly typed tag
+                      {todo.tag && ( // Only show if tag exists
                         <span 
-                          key={tag} 
+                          key={todo.tag} 
                           className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center"
                         >
-                          {tag}
+                          {todo.tag}
                           <X 
                             className="w-3 h-3 ml-1 cursor-pointer" 
-                            onClick={() => removeTagFromTodo(todo.id, tag)} 
+                            onClick={() => removeTagFromTodo(todo.id)} 
                           />
                         </span>
-                      ))}
-                      {tags && tags.filter((t: string) => !(todo.tags || []).includes(t)).length > 0 && ( // Explicitly typed t
+                      )}
+                      {!todo.tag && tags.length > 0 && ( // Only show dropdown if no tag and tags exist
                         <select 
                           className="text-xs border rounded px-1"
                           onChange={(e) => addTagToTodo(todo.id, e.target.value)}
                           value=""
                         >
                           <option value="">Add tag...</option>
-                          {tags.filter((t: string) => !(todo.tags || []).includes(t)).map((tag: string) => ( // Explicitly typed t and tag
+                          {tags.map((tag: string) => (
                             <option key={tag} value={tag}>{tag}</option>
                           ))}
                         </select>
