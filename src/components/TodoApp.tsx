@@ -4,15 +4,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, Play, CheckCircle, Clock, ImageIcon, X, Tag } from 'lucide-react';
+import { Plus, Trash2, Play, CheckCircle, Clock, ImageIcon, X, Tag, ListTodo } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'; // Import ScrollArea and ScrollBar
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
 interface TodoItem {
   id: string;
   text: string;
-  status: 'todo' | 'ongoing' | 'done';
+  status: 'todo' | 'planned' | 'ongoing' | 'done';
   createdAt: Date;
   ongoingStartTime?: Date;
   completedAt?: Date;
@@ -40,10 +40,10 @@ const TodoApp = () => {
           createdAt: new Date(todo.createdAt),
           ongoingStartTime: todo.ongoingStartTime ? new Date(todo.ongoingStartTime) : undefined,
           completedAt: todo.completedAt ? new Date(todo.completedAt) : undefined,
-          tags: todo.tags || [] // Ensure tags array exists
+          tags: todo.tags || []
         }));
         setTodos(parsedTodos);
-      } catch (error) {
+      } catch (error: any) { // Fixed syntax: catch (error: any)
         console.error('Error parsing todos:', error);
         setTodos([]);
       }
@@ -53,7 +53,7 @@ const TodoApp = () => {
     if (savedTags) {
       try {
         setTags(JSON.parse(savedTags));
-      } catch (error) {
+      } catch (error: any) { // Fixed syntax: catch (error: any)
         console.error('Error parsing tags:', error);
         setTags([]);
       }
@@ -84,11 +84,12 @@ const TodoApp = () => {
           reader.onload = (event) => {
             const imageDataUrl = event.target?.result as string;
             
-            // Add todo with image
             const text = newTodo.trim() || 'Image todo';
-            let status: 'todo' | 'ongoing' | 'done' = 'todo';
+            let status: 'todo' | 'planned' | 'ongoing' | 'done' = 'todo';
 
-            if (text.toLowerCase().startsWith('going ')) {
+            if (text.toLowerCase().startsWith('plan ')) {
+              status = 'planned';
+            } else if (text.toLowerCase().startsWith('going ')) {
               status = 'ongoing';
             } else if (text.toLowerCase().startsWith('done ')) {
               status = 'done';
@@ -96,7 +97,7 @@ const TodoApp = () => {
 
             const todo: TodoItem = {
               id: Date.now().toString(),
-              text: text.replace(/^(going|done)\s+/i, ''),
+              text: text.replace(/^(plan|going|done)\s+/i, ''),
               status,
               createdAt: new Date(),
               image: imageDataUrl,
@@ -119,9 +120,11 @@ const TodoApp = () => {
     if (!newTodo.trim() && !isPastingImage) return;
 
     const text = newTodo.trim();
-    let status: 'todo' | 'ongoing' | 'done' = 'todo';
+    let status: 'todo' | 'planned' | 'ongoing' | 'done' = 'todo';
 
-    if (text.toLowerCase().startsWith('going ')) {
+    if (text.toLowerCase().startsWith('plan ')) {
+      status = 'planned';
+    } else if (text.toLowerCase().startsWith('going ')) {
       status = 'ongoing';
     } else if (text.toLowerCase().startsWith('done ')) {
       status = 'done';
@@ -129,7 +132,7 @@ const TodoApp = () => {
 
     const todo: TodoItem = {
       id: Date.now().toString(),
-      text: text.replace(/^(going|done)\s+/i, ''),
+      text: text.replace(/^(plan|going|done)\s+/i, ''),
       status,
       createdAt: new Date(),
       tags: []
@@ -140,27 +143,23 @@ const TodoApp = () => {
     toast.success('Todo added!');
   };
 
-  const updateStatus = (id: string, newStatus: 'todo' | 'ongoing' | 'done') => {
-    setTodos(todos.map(todo => {
+  const updateStatus = (id: string, newStatus: 'todo' | 'planned' | 'ongoing' | 'done') => {
+    setTodos(todos.map((todo: TodoItem) => { // Explicitly typed todo
       if (todo.id === id) {
         const updatedTodo = { ...todo, status: newStatus };
         
-        // Set ongoing start time when moving to ongoing
         if (newStatus === 'ongoing' && !todo.ongoingStartTime) {
           updatedTodo.ongoingStartTime = new Date();
         }
         
-        // Clear ongoing start time when moving away from ongoing
         if (newStatus !== 'ongoing' && todo.ongoingStartTime) {
           updatedTodo.ongoingStartTime = undefined;
         }
         
-        // Set completion time when moving to done
         if (newStatus === 'done' && !todo.completedAt) {
           updatedTodo.completedAt = new Date();
         }
         
-        // Clear completion time when moving away from done
         if (newStatus !== 'done' && todo.completedAt) {
           updatedTodo.completedAt = undefined;
         }
@@ -173,7 +172,7 @@ const TodoApp = () => {
   };
 
   const deleteTodo = (id: string) => {
-    setTodos(todos.filter(todo => todo.id !== id));
+    setTodos(todos.filter((todo: TodoItem) => todo.id !== id)); // Explicitly typed todo
     toast.error('Todo deleted!');
   };
 
@@ -198,6 +197,7 @@ const TodoApp = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'todo': return 'bg-blue-100 border-blue-300';
+      case 'planned': return 'bg-purple-100 border-purple-300';
       case 'ongoing': return 'bg-yellow-100 border-yellow-300';
       case 'done': return 'bg-green-100 border-green-300';
       default: return 'bg-gray-100 border-gray-300';
@@ -207,16 +207,17 @@ const TodoApp = () => {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'todo': return <Plus className="w-4 h-4" />;
+      case 'planned': return <ListTodo className="w-4 h-4" />;
       case 'ongoing': return <Play className="w-4 h-4" />;
       case 'done': return <CheckCircle className="w-4 h-4" />;
       default: return <Plus className="w-4 h-4" />;
     }
   };
 
-  const filteredTodos = (status: 'todo' | 'ongoing' | 'done') => {
+  const filteredTodos = (status: 'todo' | 'planned' | 'ongoing' | 'done') => {
     if (!todos || !Array.isArray(todos)) return [];
     
-    return todos.filter(todo => {
+    return todos.filter((todo: TodoItem) => { // Explicitly typed todo
       if (!todo) return false;
       const statusMatch = todo.status === status;
       const tagMatch = selectedTag ? (todo.tags || []).includes(selectedTag) : true;
@@ -224,10 +225,8 @@ const TodoApp = () => {
     });
   };
 
-  // Update elapsed time display every second for ongoing tasks
   useEffect(() => {
     const interval = setInterval(() => {
-      // Force re-render to update elapsed time
       setTodos([...todos]);
     }, 1000);
 
@@ -244,18 +243,17 @@ const TodoApp = () => {
 
   const removeTag = (tag: string) => {
     if (window.confirm(`Are you sure you want to delete the tag "${tag}"? This will remove it from all todos.`)) {
-      setTags(tags.filter(t => t !== tag));
-      // Remove tag from all todos
-      setTodos(todos.map(todo => ({
+      setTags(tags.filter((t: string) => t !== tag)); // Explicitly typed t
+      setTodos(todos.map((todo: TodoItem) => ({ // Explicitly typed todo
         ...todo,
-        tags: (todo.tags || []).filter(t => t !== tag)
+        tags: (todo.tags || []).filter((t: string) => t !== tag) // Explicitly typed t
       })));
       toast.success(`Tag "${tag}" deleted!`);
     }
   };
 
   const addTagToTodo = (todoId: string, tag: string) => {
-    setTodos(todos.map(todo => {
+    setTodos(todos.map((todo: TodoItem) => { // Explicitly typed todo
       if (todo.id === todoId && !(todo.tags || []).includes(tag)) {
         return { ...todo, tags: [...(todo.tags || []), tag] };
       }
@@ -265,9 +263,9 @@ const TodoApp = () => {
   };
 
   const removeTagFromTodo = (todoId: string, tag: string) => {
-    setTodos(todos.map(todo => {
+    setTodos(todos.map((todo: TodoItem) => { // Explicitly typed todo
       if (todo.id === todoId) {
-        return { ...todo, tags: (todo.tags || []).filter(t => t !== tag) };
+        return { ...todo, tags: (todo.tags || []).filter((t: string) => t !== tag) }; // Explicitly typed t
       }
       return todo;
     }));
@@ -280,7 +278,7 @@ const TodoApp = () => {
   };
 
   const getTagUsageCount = (tag: string): number => {
-    return todos.filter(todo => (todo.tags || []).includes(tag)).length;
+    return todos.filter((todo: TodoItem) => (todo.tags || []).includes(tag)).length; // Explicitly typed todo
   };
 
   return (
@@ -297,7 +295,7 @@ const TodoApp = () => {
               ref={inputRef}
               value={newTodo}
               onChange={(e) => setNewTodo(e.target.value)}
-              placeholder="Type your todo or paste an image (Ctrl+V)..."
+              placeholder="Type your todo or paste an image (Ctrl+V)... (e.g., 'plan new feature')"
               className="pr-10"
               onKeyPress={(e) => e.key === 'Enter' && addTodo()}
               onPaste={handlePaste}
@@ -340,7 +338,7 @@ const TodoApp = () => {
                 <p className="text-gray-500 text-sm">No tags created yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {tags.map(tag => (
+                  {tags.map((tag: string) => ( // Explicitly typed tag
                     <div key={tag} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                       <div className="flex items-center gap-2">
                         <Tag className="w-4 h-4 text-gray-600" />
@@ -374,7 +372,7 @@ const TodoApp = () => {
             >
               All
             </Button>
-            {tags && tags.map(tag => (
+            {tags && tags.map((tag: string) => ( // Explicitly typed tag
               <Button
                 key={tag}
                 variant={selectedTag === tag ? "default" : "outline"}
@@ -404,8 +402,8 @@ const TodoApp = () => {
         </div>
 
         {/* Todo Columns */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Todo Column */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {/* To Do Column */}
           <Card className={getStatusColor('todo')}>
             <CardHeader className="bg-blue-200">
               <CardTitle className="text-blue-800 flex items-center gap-2">
@@ -413,10 +411,10 @@ const TodoApp = () => {
                 To Do ({filteredTodos('todo').length})
               </CardTitle>
             </CardHeader>
-            <ScrollArea className="h-[550px] rounded-md border">
+            <ScrollArea className="h-[400px] rounded-md border">
               <CardContent className="p-4 space-y-3">
-                {filteredTodos('todo').map(todo => (
-                  <div key={todo.id} className="bg-white p-3  rounded-lg border border-blue-200 shadow-sm">
+                {filteredTodos('todo').map((todo: TodoItem) => ( // Explicitly typed todo
+                  <div key={todo.id} className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
                     {todo.image && (
                       <div 
                         className="mb-2 cursor-pointer"
@@ -435,7 +433,7 @@ const TodoApp = () => {
                     
                     {/* Tags for todo */}
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {(todo.tags || []).map(tag => (
+                      {(todo.tags || []).map((tag: string) => ( // Explicitly typed tag
                         <span 
                           key={tag} 
                           className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center"
@@ -447,14 +445,86 @@ const TodoApp = () => {
                           />
                         </span>
                       ))}
-                      {tags && tags.filter(t => !(todo.tags || []).includes(t)).length > 0 && (
+                      {tags && tags.filter((t: string) => !(todo.tags || []).includes(t)).length > 0 && ( // Explicitly typed t
                         <select 
                           className="text-xs border rounded px-1"
                           onChange={(e) => addTagToTodo(todo.id, e.target.value)}
                           value=""
                         >
                           <option value="">Add tag...</option>
-                          {tags.filter(t => !(todo.tags || []).includes(t)).map(tag => (
+                          {tags.filter((t: string) => !(todo.tags || []).includes(t)).map((tag: string) => ( // Explicitly typed t and tag
+                            <option key={tag} value={tag}>{tag}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    
+                    <div className="flex gap-2 mt-2">
+                      <Button size="sm" onClick={() => updateStatus(todo.id, 'planned')} className="bg-purple-500 hover:bg-purple-600">
+                        <ListTodo className="w-3 h-3 mr-1" />
+                        Plan
+                      </Button>
+                      <Button size="sm" onClick={() => deleteTodo(todo.id)} variant="destructive">
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+              <ScrollBar orientation="vertical" />
+            </ScrollArea>
+          </Card>
+
+          {/* Planned Column */}
+          <Card className={getStatusColor('planned')}>
+            <CardHeader className="bg-purple-200">
+              <CardTitle className="text-purple-800 flex items-center gap-2">
+                <ListTodo className="w-5 h-5" />
+                Planned ({filteredTodos('planned').length})
+              </CardTitle>
+            </CardHeader>
+            <ScrollArea className="h-[400px] rounded-md border">
+              <CardContent className="p-4 space-y-3">
+                {filteredTodos('planned').map((todo: TodoItem) => ( // Explicitly typed todo
+                  <div key={todo.id} className="bg-white p-3 rounded-lg border border-purple-200 shadow-sm">
+                    {todo.image && (
+                      <div 
+                        className="mb-2 cursor-pointer"
+                        onClick={() => setFullscreenImage(todo.image!)}
+                      >
+                        <Image
+                          src={todo.image}
+                          alt="Todo image"
+                          width={200}
+                          height={150}
+                          className="w-full h-32 object-cover rounded-md"
+                        />
+                      </div>
+                    )}
+                    <p className="text-sm font-medium">{todo.text}</p>
+                    
+                    {/* Tags for planned */}
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {(todo.tags || []).map((tag: string) => ( // Explicitly typed tag
+                        <span 
+                          key={tag} 
+                          className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full flex items-center"
+                        >
+                          {tag}
+                          <X 
+                            className="w-3 h-3 ml-1 cursor-pointer" 
+                            onClick={() => removeTagFromTodo(todo.id, tag)} 
+                          />
+                        </span>
+                      ))}
+                      {tags && tags.filter((t: string) => !(todo.tags || []).includes(t)).length > 0 && ( // Explicitly typed t
+                        <select 
+                          className="text-xs border rounded px-1"
+                          onChange={(e) => addTagToTodo(todo.id, e.target.value)}
+                          value=""
+                        >
+                          <option value="">Add tag...</option>
+                          {tags.filter((t: string) => !(todo.tags || []).includes(t)).map((tag: string) => ( // Explicitly typed t and tag
                             <option key={tag} value={tag}>{tag}</option>
                           ))}
                         </select>
@@ -465,6 +535,10 @@ const TodoApp = () => {
                       <Button size="sm" onClick={() => updateStatus(todo.id, 'ongoing')} className="bg-yellow-500 hover:bg-yellow-600">
                         <Play className="w-3 h-3 mr-1" />
                         Start
+                      </Button>
+                      <Button size="sm" onClick={() => updateStatus(todo.id, 'todo')} variant="outline" className="text-blue-500 border-blue-500 hover:bg-blue-50">
+                        <Plus className="w-3 h-3 mr-1" />
+                        To Do
                       </Button>
                       <Button size="sm" onClick={() => deleteTodo(todo.id)} variant="destructive">
                         <Trash2 className="w-3 h-3" />
@@ -485,9 +559,9 @@ const TodoApp = () => {
                 Ongoing ({filteredTodos('ongoing').length})
               </CardTitle>
             </CardHeader>
-            <ScrollArea className="h-[550px] rounded-md border">
+            <ScrollArea className="h-[400px] rounded-md border">
               <CardContent className="p-4 space-y-3">
-                {filteredTodos('ongoing').map(todo => (
+                {filteredTodos('ongoing').map((todo: TodoItem) => ( // Explicitly typed todo
                   <div key={todo.id} className="bg-white p-3 rounded-lg border border-yellow-200 shadow-sm">
                     {todo.image && (
                       <div 
@@ -507,7 +581,7 @@ const TodoApp = () => {
                     
                     {/* Tags for ongoing */}
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {(todo.tags || []).map(tag => (
+                      {(todo.tags || []).map((tag: string) => ( // Explicitly typed tag
                         <span 
                           key={tag} 
                           className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full flex items-center"
@@ -519,14 +593,14 @@ const TodoApp = () => {
                           />
                         </span>
                       ))}
-                      {tags && tags.filter(t => !(todo.tags || []).includes(t)).length > 0 && (
+                      {tags && tags.filter((t: string) => !(todo.tags || []).includes(t)).length > 0 && ( // Explicitly typed t
                         <select 
                           className="text-xs border rounded px-1"
                           onChange={(e) => addTagToTodo(todo.id, e.target.value)}
                           value=""
                         >
                           <option value="">Add tag...</option>
-                          {tags.filter(t => !(todo.tags || []).includes(t)).map(tag => (
+                          {tags.filter((t: string) => !(todo.tags || []).includes(t)).map((tag: string) => ( // Explicitly typed t and tag
                             <option key={tag} value={tag}>{tag}</option>
                           ))}
                         </select>
@@ -543,6 +617,10 @@ const TodoApp = () => {
                       <Button size="sm" onClick={() => updateStatus(todo.id, 'done')} className="bg-green-500 hover:bg-green-600">
                         <CheckCircle className="w-3 h-3 mr-1" />
                         Complete
+                      </Button>
+                      <Button size="sm" onClick={() => updateStatus(todo.id, 'planned')} variant="outline" className="text-purple-500 border-purple-500 hover:bg-purple-50">
+                        <ListTodo className="w-3 h-3 mr-1" />
+                        Plan
                       </Button>
                       <Button size="sm" onClick={() => deleteTodo(todo.id)} variant="destructive">
                         <Trash2 className="w-3 h-3" />
@@ -563,9 +641,9 @@ const TodoApp = () => {
                 Done ({filteredTodos('done').length})
               </CardTitle>
             </CardHeader>
-            <ScrollArea className="h-[550px] rounded-md border">
+            <ScrollArea className="h-[400px] rounded-md border">
               <CardContent className="p-4 space-y-3">
-                {filteredTodos('done').map(todo => (
+                {filteredTodos('done').map((todo: TodoItem) => ( // Explicitly typed todo
                   <div key={todo.id} className="bg-white p-3 rounded-lg border border-green-200 shadow-sm">
                     {todo.image && (
                       <div 
@@ -585,7 +663,7 @@ const TodoApp = () => {
                     
                     {/* Tags for done */}
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {(todo.tags || []).map(tag => (
+                      {(todo.tags || []).map((tag: string) => ( // Explicitly typed tag
                         <span 
                           key={tag} 
                           className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center"
@@ -597,14 +675,14 @@ const TodoApp = () => {
                           />
                         </span>
                       ))}
-                      {tags && tags.filter(t => !(todo.tags || []).includes(t)).length > 0 && (
+                      {tags && tags.filter((t: string) => !(todo.tags || []).includes(t)).length > 0 && ( // Explicitly typed t
                         <select 
                           className="text-xs border rounded px-1"
                           onChange={(e) => addTagToTodo(todo.id, e.target.value)}
                           value=""
                         >
                           <option value="">Add tag...</option>
-                          {tags.filter(t => !(todo.tags || []).includes(t)).map(tag => (
+                          {tags.filter((t: string) => !(todo.tags || []).includes(t)).map((tag: string) => ( // Explicitly typed t and tag
                             <option key={tag} value={tag}>{tag}</option>
                           ))}
                         </select>
