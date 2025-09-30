@@ -27,6 +27,7 @@ const TodoApp = () => {
   const [tags, setTags] = useState<string[]>([]);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [newTag, setNewTag] = useState('');
+  const [showTagManager, setShowTagManager] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -236,16 +237,20 @@ const TodoApp = () => {
     if (newTag.trim() && !tags.includes(newTag.trim())) {
       setTags([...tags, newTag.trim()]);
       setNewTag('');
+      toast.success(`Tag "${newTag.trim()}" added!`);
     }
   };
 
   const removeTag = (tag: string) => {
-    setTags(tags.filter(t => t !== tag));
-    // Remove tag from all todos
-    setTodos(todos.map(todo => ({
-      ...todo,
-      tags: (todo.tags || []).filter(t => t !== tag)
-    })));
+    if (window.confirm(`Are you sure you want to delete the tag "${tag}"? This will remove it from all todos.`)) {
+      setTags(tags.filter(t => t !== tag));
+      // Remove tag from all todos
+      setTodos(todos.map(todo => ({
+        ...todo,
+        tags: (todo.tags || []).filter(t => t !== tag)
+      })));
+      toast.success(`Tag "${tag}" deleted!`);
+    }
   };
 
   const addTagToTodo = (todoId: string, tag: string) => {
@@ -255,6 +260,7 @@ const TodoApp = () => {
       }
       return todo;
     }));
+    toast.success(`Tag "${tag}" added to todo!`);
   };
 
   const removeTagFromTodo = (todoId: string, tag: string) => {
@@ -264,11 +270,16 @@ const TodoApp = () => {
       }
       return todo;
     }));
+    toast.success(`Tag "${tag}" removed from todo!`);
   };
 
   const getCompletionTime = (completedAt?: Date): string => {
     if (!completedAt) return '';
     return `Completed: ${completedAt.toLocaleString()}`;
+  };
+
+  const getTagUsageCount = (tag: string): number => {
+    return todos.filter(todo => (todo.tags || []).includes(tag)).length;
   };
 
   return (
@@ -310,8 +321,50 @@ const TodoApp = () => {
 
         {/* Tags Section */}
         <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">Tags</h2>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setShowTagManager(!showTagManager)}
+            >
+              {showTagManager ? 'Hide Manager' : 'Manage Tags'}
+            </Button>
+          </div>
+
+          {showTagManager && (
+            <div className="bg-white p-4 rounded-lg border mb-4">
+              <h3 className="font-medium mb-3">Tag Manager</h3>
+              {tags.length === 0 ? (
+                <p className="text-gray-500 text-sm">No tags created yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {tags.map(tag => (
+                    <div key={tag} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <div className="flex items-center gap-2">
+                        <Tag className="w-4 h-4 text-gray-600" />
+                        <span className="font-medium">{tag}</span>
+                        <span className="text-xs text-gray-500">
+                          ({getTagUsageCount(tag)} {getTagUsageCount(tag) === 1 ? 'todo' : 'todos'})
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeTag(tag)}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2 mb-2">
-            <span className="font-medium">Tags:</span>
+            <span className="font-medium">Filter by:</span>
             <Button 
               variant={selectedTag === null ? "default" : "outline"} 
               size="sm" 
@@ -330,13 +383,6 @@ const TodoApp = () => {
               >
                 <Tag className="w-3 h-3" />
                 {tag}
-                <X 
-                  className="w-3 h-3 cursor-pointer ml-1" 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeTag(tag);
-                  }} 
-                />
               </Button>
             ))}
           </div>
