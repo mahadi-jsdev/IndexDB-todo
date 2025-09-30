@@ -485,7 +485,7 @@ const TodoApp = () => {
                 Ongoing ({filteredTodos('ongoing').length})
               </CardTitle>
             </CardHeader>
-            <ScrollArea className="h-[400px] rounded-md border">
+            <ScrollArea className="h-[500px] rounded-md border">
               <CardContent className="p-4 space-y-3">
                 {filteredTodos('ongoing').map(todo => (
                   <div key={todo.id} className="bg-white p-3 rounded-lg border border-yellow-200 shadow-sm">
