@@ -414,9 +414,9 @@ const TodoApp = () => {
               </CardTitle>
             </CardHeader>
             <ScrollArea className="h-[550px] rounded-md border">
-              <CardContent className="p-4 space-y-3">
+              <CardContent className=" space-y-3">
                 {filteredTodos('todo').map(todo => (
-                  <div key={todo.id} className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
+                  <div key={todo.id} className="bg-white  rounded-lg border border-blue-200 shadow-sm">
                     {todo.image && (
                       <div 
                         className="mb-2 cursor-pointer"
