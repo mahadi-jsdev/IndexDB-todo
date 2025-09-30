@@ -32,18 +32,29 @@ const TodoApp = () => {
   useEffect(() => {
     const savedTodos = localStorage.getItem('todos');
     if (savedTodos) {
-      const parsedTodos = JSON.parse(savedTodos).map((todo: any) => ({
-        ...todo,
-        createdAt: new Date(todo.createdAt),
-        ongoingStartTime: todo.ongoingStartTime ? new Date(todo.ongoingStartTime) : undefined,
-        completedAt: todo.completedAt ? new Date(todo.completedAt) : undefined
-      }));
-      setTodos(parsedTodos);
+      try {
+        const parsedTodos = JSON.parse(savedTodos).map((todo: any) => ({
+          ...todo,
+          createdAt: new Date(todo.createdAt),
+          ongoingStartTime: todo.ongoingStartTime ? new Date(todo.ongoingStartTime) : undefined,
+          completedAt: todo.completedAt ? new Date(todo.completedAt) : undefined,
+          tags: todo.tags || [] // Ensure tags array exists
+        }));
+        setTodos(parsedTodos);
+      } catch (error) {
+        console.error('Error parsing todos:', error);
+        setTodos([]);
+      }
     }
     
     const savedTags = localStorage.getItem('tags');
     if (savedTags) {
-      setTags(JSON.parse(savedTags));
+      try {
+        setTags(JSON.parse(savedTags));
+      } catch (error) {
+        console.error('Error parsing tags:', error);
+        setTags([]);
+      }
     }
   }, []);
 
@@ -201,9 +212,12 @@ const TodoApp = () => {
   };
 
   const filteredTodos = (status: 'todo' | 'ongoing' | 'done') => {
+    if (!todos || !Array.isArray(todos)) return [];
+    
     return todos.filter(todo => {
+      if (!todo) return false;
       const statusMatch = todo.status === status;
-      const tagMatch = selectedTag ? todo.tags.includes(selectedTag) : true;
+      const tagMatch = selectedTag ? (todo.tags || []).includes(selectedTag) : true;
       return statusMatch && tagMatch;
     });
   };
@@ -230,14 +244,14 @@ const TodoApp = () => {
     // Remove tag from all todos
     setTodos(todos.map(todo => ({
       ...todo,
-      tags: todo.tags.filter(t => t !== tag)
+      tags: (todo.tags || []).filter(t => t !== tag)
     })));
   };
 
   const addTagToTodo = (todoId: string, tag: string) => {
     setTodos(todos.map(todo => {
-      if (todo.id === todoId && !todo.tags.includes(tag)) {
-        return { ...todo, tags: [...todo.tags, tag] };
+      if (todo.id === todoId && !(todo.tags || []).includes(tag)) {
+        return { ...todo, tags: [...(todo.tags || []), tag] };
       }
       return todo;
     }));
@@ -246,7 +260,7 @@ const TodoApp = () => {
   const removeTagFromTodo = (todoId: string, tag: string) => {
     setTodos(todos.map(todo => {
       if (todo.id === todoId) {
-        return { ...todo, tags: todo.tags.filter(t => t !== tag) };
+        return { ...todo, tags: (todo.tags || []).filter(t => t !== tag) };
       }
       return todo;
     }));
@@ -306,7 +320,7 @@ const TodoApp = () => {
             >
               All
             </Button>
-            {tags.map(tag => (
+            {tags && tags.map(tag => (
               <Button
                 key={tag}
                 variant={selectedTag === tag ? "default" : "outline"}
@@ -373,7 +387,7 @@ const TodoApp = () => {
                   
                   {/* Tags for todo */}
                   <div className="flex flex-wrap gap-1 mt-2">
-                    {todo.tags.map(tag => (
+                    {(todo.tags || []).map(tag => (
                       <span 
                         key={tag} 
                         className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center"
@@ -385,14 +399,14 @@ const TodoApp = () => {
                         />
                       </span>
                     ))}
-                    {tags.filter(t => !todo.tags.includes(t)).length > 0 && (
+                    {tags && tags.filter(t => !(todo.tags || []).includes(t)).length > 0 && (
                       <select 
                         className="text-xs border rounded px-1"
                         onChange={(e) => addTagToTodo(todo.id, e.target.value)}
                         value=""
                       >
                         <option value="">Add tag...</option>
-                        {tags.filter(t => !todo.tags.includes(t)).map(tag => (
+                        {tags.filter(t => !(todo.tags || []).includes(t)).map(tag => (
                           <option key={tag} value={tag}>{tag}</option>
                         ))}
                       </select>
@@ -442,7 +456,7 @@ const TodoApp = () => {
                   
                   {/* Tags for ongoing */}
                   <div className="flex flex-wrap gap-1 mt-2">
-                    {todo.tags.map(tag => (
+                    {(todo.tags || []).map(tag => (
                       <span 
                         key={tag} 
                         className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full flex items-center"
@@ -454,14 +468,14 @@ const TodoApp = () => {
                         />
                       </span>
                     ))}
-                    {tags.filter(t => !todo.tags.includes(t)).length > 0 && (
+                    {tags && tags.filter(t => !(todo.tags || []).includes(t)).length > 0 && (
                       <select 
                         className="text-xs border rounded px-1"
                         onChange={(e) => addTagToTodo(todo.id, e.target.value)}
                         value=""
                       >
                         <option value="">Add tag...</option>
-                        {tags.filter(t => !todo.tags.includes(t)).map(tag => (
+                        {tags.filter(t => !(todo.tags || []).includes(t)).map(tag => (
                           <option key={tag} value={tag}>{tag}</option>
                         ))}
                       </select>
@@ -517,7 +531,7 @@ const TodoApp = () => {
                   
                   {/* Tags for done */}
                   <div className="flex flex-wrap gap-1 mt-2">
-                    {todo.tags.map(tag => (
+                    {(todo.tags || []).map(tag => (
                       <span 
                         key={tag} 
                         className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center"
@@ -529,14 +543,14 @@ const TodoApp = () => {
                         />
                       </span>
                     ))}
-                    {tags.filter(t => !todo.tags.includes(t)).length > 0 && (
+                    {tags && tags.filter(t => !(todo.tags || []).includes(t)).length > 0 && (
                       <select 
                         className="text-xs border rounded px-1"
                         onChange={(e) => addTagToTodo(todo.id, e.target.value)}
                         value=""
                       >
                         <option value="">Add tag...</option>
-                        {tags.filter(t => !todo.tags.includes(t)).map(tag => (
+                        {tags.filter(t => !(todo.tags || []).includes(t)).map(tag => (
                           <option key={tag} value={tag}>{tag}</option>
                         ))}
                       </select>
