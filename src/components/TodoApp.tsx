@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, Play, CheckCircle, Clock, ImageIcon, X } from 'lucide-react';
+import { Plus, Trash2, Play, CheckCircle, Clock, ImageIcon, X, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
 
@@ -14,7 +14,9 @@ interface TodoItem {
   status: 'todo' | 'ongoing' | 'done';
   createdAt: Date;
   ongoingStartTime?: Date;
+  completedAt?: Date;
   image?: string;
+  tags: string[];
 }
 
 const TodoApp = () => {
@@ -22,6 +24,9 @@ const TodoApp = () => {
   const [newTodo, setNewTodo] = useState('');
   const [isPastingImage, setIsPastingImage] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [newTag, setNewTag] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -30,15 +35,25 @@ const TodoApp = () => {
       const parsedTodos = JSON.parse(savedTodos).map((todo: any) => ({
         ...todo,
         createdAt: new Date(todo.createdAt),
-        ongoingStartTime: todo.ongoingStartTime ? new Date(todo.ongoingStartTime) : undefined
+        ongoingStartTime: todo.ongoingStartTime ? new Date(todo.ongoingStartTime) : undefined,
+        completedAt: todo.completedAt ? new Date(todo.completedAt) : undefined
       }));
       setTodos(parsedTodos);
+    }
+    
+    const savedTags = localStorage.getItem('tags');
+    if (savedTags) {
+      setTags(JSON.parse(savedTags));
     }
   }, []);
 
   useEffect(() => {
     localStorage.setItem('todos', JSON.stringify(todos));
   }, [todos]);
+
+  useEffect(() => {
+    localStorage.setItem('tags', JSON.stringify(tags));
+  }, [tags]);
 
   const handlePaste = async (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
@@ -71,7 +86,8 @@ const TodoApp = () => {
               text: text.replace(/^(going|done)\s+/i, ''),
               status,
               createdAt: new Date(),
-              image: imageDataUrl
+              image: imageDataUrl,
+              tags: []
             };
 
             setTodos([...todos, todo]);
@@ -102,7 +118,8 @@ const TodoApp = () => {
       id: Date.now().toString(),
       text: text.replace(/^(going|done)\s+/i, ''),
       status,
-      createdAt: new Date()
+      createdAt: new Date(),
+      tags: []
     };
 
     setTodos([...todos, todo]);
@@ -123,6 +140,16 @@ const TodoApp = () => {
         // Clear ongoing start time when moving away from ongoing
         if (newStatus !== 'ongoing' && todo.ongoingStartTime) {
           updatedTodo.ongoingStartTime = undefined;
+        }
+        
+        // Set completion time when moving to done
+        if (newStatus === 'done' && !todo.completedAt) {
+          updatedTodo.completedAt = new Date();
+        }
+        
+        // Clear completion time when moving away from done
+        if (newStatus !== 'done' && todo.completedAt) {
+          updatedTodo.completedAt = undefined;
         }
         
         return updatedTodo;
@@ -174,7 +201,11 @@ const TodoApp = () => {
   };
 
   const filteredTodos = (status: 'todo' | 'ongoing' | 'done') => {
-    return todos.filter(todo => todo.status === status);
+    return todos.filter(todo => {
+      const statusMatch = todo.status === status;
+      const tagMatch = selectedTag ? todo.tags.includes(selectedTag) : true;
+      return statusMatch && tagMatch;
+    });
   };
 
   // Update elapsed time display every second for ongoing tasks
@@ -187,6 +218,45 @@ const TodoApp = () => {
     return () => clearInterval(interval);
   }, [todos]);
 
+  const addTag = () => {
+    if (newTag.trim() && !tags.includes(newTag.trim())) {
+      setTags([...tags, newTag.trim()]);
+      setNewTag('');
+    }
+  };
+
+  const removeTag = (tag: string) => {
+    setTags(tags.filter(t => t !== tag));
+    // Remove tag from all todos
+    setTodos(todos.map(todo => ({
+      ...todo,
+      tags: todo.tags.filter(t => t !== tag)
+    })));
+  };
+
+  const addTagToTodo = (todoId: string, tag: string) => {
+    setTodos(todos.map(todo => {
+      if (todo.id === todoId && !todo.tags.includes(tag)) {
+        return { ...todo, tags: [...todo.tags, tag] };
+      }
+      return todo;
+    }));
+  };
+
+  const removeTagFromTodo = (todoId: string, tag: string) => {
+    setTodos(todos.map(todo => {
+      if (todo.id === todoId) {
+        return { ...todo, tags: todo.tags.filter(t => t !== tag) };
+      }
+      return todo;
+    }));
+  };
+
+  const getCompletionTime = (completedAt?: Date): string => {
+    if (!completedAt) return '';
+    return `Completed: ${completedAt.toLocaleString()}`;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4">
       <div className="max-w-6xl mx-auto">
@@ -195,7 +265,7 @@ const TodoApp = () => {
         </h1>
 
         {/* Add Todo Input */}
-        <div className="flex gap-2 mb-8">
+        <div className="flex gap-2 mb-4">
           <div className="flex-1 relative">
             <Input
               ref={inputRef}
@@ -222,6 +292,54 @@ const TodoApp = () => {
             )}
             Add
           </Button>
+        </div>
+
+        {/* Tags Section */}
+        <div className="mb-6">
+          <div className="flex flex-wrap gap-2 mb-2">
+            <span className="font-medium">Tags:</span>
+            <Button 
+              variant={selectedTag === null ? "default" : "outline"} 
+              size="sm" 
+              onClick={() => setSelectedTag(null)}
+              className="h-7"
+            >
+              All
+            </Button>
+            {tags.map(tag => (
+              <Button
+                key={tag}
+                variant={selectedTag === tag ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedTag(tag === selectedTag ? null : tag)}
+                className="h-7 flex items-center gap-1"
+              >
+                <Tag className="w-3 h-3" />
+                {tag}
+                <X 
+                  className="w-3 h-3 cursor-pointer ml-1" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeTag(tag);
+                  }} 
+                />
+              </Button>
+            ))}
+          </div>
+          
+          <div className="flex gap-2">
+            <Input
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              placeholder="Add new tag"
+              className="max-w-xs"
+              onKeyPress={(e) => e.key === 'Enter' && addTag()}
+            />
+            <Button onClick={addTag} size="sm">
+              <Plus className="w-4 h-4 mr-1" />
+              Add Tag
+            </Button>
+          </div>
         </div>
 
         {/* Todo Columns */}
@@ -252,6 +370,35 @@ const TodoApp = () => {
                     </div>
                   )}
                   <p className="text-sm font-medium">{todo.text}</p>
+                  
+                  {/* Tags for todo */}
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {todo.tags.map(tag => (
+                      <span 
+                        key={tag} 
+                        className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center"
+                      >
+                        {tag}
+                        <X 
+                          className="w-3 h-3 ml-1 cursor-pointer" 
+                          onClick={() => removeTagFromTodo(todo.id, tag)} 
+                        />
+                      </span>
+                    ))}
+                    {tags.filter(t => !todo.tags.includes(t)).length > 0 && (
+                      <select 
+                        className="text-xs border rounded px-1"
+                        onChange={(e) => addTagToTodo(todo.id, e.target.value)}
+                        value=""
+                      >
+                        <option value="">Add tag...</option>
+                        {tags.filter(t => !todo.tags.includes(t)).map(tag => (
+                          <option key={tag} value={tag}>{tag}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  
                   <div className="flex gap-2 mt-2">
                     <Button size="sm" onClick={() => updateStatus(todo.id, 'ongoing')} className="bg-yellow-500 hover:bg-yellow-600">
                       <Play className="w-3 h-3 mr-1" />
@@ -292,6 +439,35 @@ const TodoApp = () => {
                     </div>
                   )}
                   <p className="text-sm font-medium">{todo.text}</p>
+                  
+                  {/* Tags for ongoing */}
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {todo.tags.map(tag => (
+                      <span 
+                        key={tag} 
+                        className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full flex items-center"
+                      >
+                        {tag}
+                        <X 
+                          className="w-3 h-3 ml-1 cursor-pointer" 
+                          onClick={() => removeTagFromTodo(todo.id, tag)} 
+                        />
+                      </span>
+                    ))}
+                    {tags.filter(t => !todo.tags.includes(t)).length > 0 && (
+                      <select 
+                        className="text-xs border rounded px-1"
+                        onChange={(e) => addTagToTodo(todo.id, e.target.value)}
+                        value=""
+                      >
+                        <option value="">Add tag...</option>
+                        {tags.filter(t => !todo.tags.includes(t)).map(tag => (
+                          <option key={tag} value={tag}>{tag}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  
                   {todo.ongoingStartTime && (
                     <div className="flex items-center gap-1 mt-1 text-xs text-yellow-600">
                       <Clock className="w-3 h-3" />
@@ -338,6 +514,41 @@ const TodoApp = () => {
                     </div>
                   )}
                   <p className="text-sm font-medium text-green-600">{todo.text}</p>
+                  
+                  {/* Tags for done */}
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {todo.tags.map(tag => (
+                      <span 
+                        key={tag} 
+                        className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center"
+                      >
+                        {tag}
+                        <X 
+                          className="w-3 h-3 ml-1 cursor-pointer" 
+                          onClick={() => removeTagFromTodo(todo.id, tag)} 
+                        />
+                      </span>
+                    ))}
+                    {tags.filter(t => !todo.tags.includes(t)).length > 0 && (
+                      <select 
+                        className="text-xs border rounded px-1"
+                        onChange={(e) => addTagToTodo(todo.id, e.target.value)}
+                        value=""
+                      >
+                        <option value="">Add tag...</option>
+                        {tags.filter(t => !todo.tags.includes(t)).map(tag => (
+                          <option key={tag} value={tag}>{tag}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  
+                  {todo.completedAt && (
+                    <div className="text-xs text-green-600 mt-1">
+                      {getCompletionTime(todo.completedAt)}
+                    </div>
+                  )}
+                  
                   <div className="flex gap-2 mt-2">
                     <Button size="sm" onClick={() => updateStatus(todo.id, 'todo')} className="bg-blue-500 hover:bg-blue-600">
                       <Plus className="w-3 h-3 mr-1" />
