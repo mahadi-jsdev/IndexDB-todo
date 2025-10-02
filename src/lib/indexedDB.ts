@@ -20,7 +20,7 @@ async function initDB() {
           db.createObjectStore(TAG_STORE_NAME, { keyPath: 'name' }); // Tags will have a 'name' property as key
         }
       },
-    });o
+    });
   }
   return db;
 }
