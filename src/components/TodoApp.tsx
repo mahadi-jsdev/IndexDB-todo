@@ -18,6 +18,14 @@ import {
 import { toast } from "sonner";
 import Image from "next/image";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import {
+  getAllTodos,
+  addOrUpdateTodo,
+  deleteTodoFromDB,
+  getAllTags,
+  addOrUpdateTag,
+  deleteTagFromDB,
+} from "@/lib/indexedDB"; // Import IndexedDB utilities
 
 interface TodoItem {
   id: string;
@@ -42,10 +50,10 @@ const TodoApp = () => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const savedTodos = localStorage.getItem("todos");
-    if (savedTodos) {
+    const loadData = async () => {
       try {
-        const parsedTodos = JSON.parse(savedTodos).map((todo: any) => ({
+        const savedTodos = await getAllTodos();
+        const parsedTodos = savedTodos.map((todo: any) => ({
           ...todo,
           createdAt: new Date(todo.createdAt),
           ongoingStartTime: todo.ongoingStartTime
@@ -57,30 +65,19 @@ const TodoApp = () => {
           tag: todo.tag || undefined,
         }));
         setTodos(parsedTodos);
-      } catch (error: any) {
-        console.error("Error parsing todos:", error);
-        setTodos([]);
-      }
-    }
 
-    const savedTags = localStorage.getItem("tags");
-    if (savedTags) {
-      try {
-        setTags(JSON.parse(savedTags));
+        const savedTags = await getAllTags();
+        setTags(savedTags);
       } catch (error: any) {
-        console.error("Error parsing tags:", error);
-        setTags([]);
+        console.error("Error loading data from IndexedDB:", error);
+        toast.error("Failed to load data.");
       }
-    }
+    };
+    loadData();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem("todos", JSON.stringify(todos));
-  }, [todos]);
-
-  useEffect(() => {
-    localStorage.setItem("tags", JSON.stringify(tags));
-  }, [tags]);
+  // No need for a separate useEffect to save todos/tags,
+  // as each modification function will directly update IndexedDB.
 
   const handlePaste = async (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
@@ -95,7 +92,7 @@ const TodoApp = () => {
         const blob = item.getAsFile();
         if (blob) {
           const reader = new FileReader();
-          reader.onload = (event) => {
+          reader.onload = async (event) => {
             const imageDataUrl = event.target?.result as string;
 
             const text = newTodo.trim() || "Image todo";
@@ -118,7 +115,8 @@ const TodoApp = () => {
               tag: selectedTag !== null ? selectedTag : undefined,
             };
 
-            setTodos([...todos, todo]);
+            await addOrUpdateTodo(todo);
+            setTodos((prevTodos) => [...prevTodos, todo]);
             setNewTodo("");
             setIsPastingImage(false);
             toast.success("Image todo added!");
@@ -130,7 +128,7 @@ const TodoApp = () => {
     }
   };
 
-  const addTodo = () => {
+  const addTodo = async () => {
     if (!newTodo.trim() && !isPastingImage) return;
 
     const text = newTodo.trim();
@@ -152,46 +150,43 @@ const TodoApp = () => {
       tag: selectedTag !== null ? selectedTag : undefined,
     };
 
-    setTodos([...todos, todo]);
+    await addOrUpdateTodo(todo);
+    setTodos((prevTodos) => [...prevTodos, todo]);
     setNewTodo("");
     toast.success("Todo added!");
   };
 
-  const updateStatus = (
+  const updateStatus = async (
     id: string,
     newStatus: "todo" | "planned" | "ongoing" | "done",
   ) => {
-    setTodos(
-      todos.map((todo: TodoItem) => {
-        if (todo.id === id) {
-          const updatedTodo = { ...todo, status: newStatus };
+    const updatedTodos = todos.map((todo: TodoItem) => {
+      if (todo.id === id) {
+        const updatedTodo = { ...todo, status: newStatus };
 
-          if (newStatus === "ongoing" && !todo.ongoingStartTime) {
-            updatedTodo.ongoingStartTime = new Date();
-          }
-
-          if (newStatus !== "ongoing" && todo.ongoingStartTime) {
-            updatedTodo.ongoingStartTime = undefined;
-          }
-
-          if (newStatus === "done" && !todo.completedAt) {
-            updatedTodo.completedAt = new Date();
-          }
-
-          if (newStatus !== "done" && todo.completedAt) {
-            updatedTodo.completedAt = undefined;
-          }
-
-          return updatedTodo;
+        if (newStatus === "ongoing" && !todo.ongoingStartTime) {
+          updatedTodo.ongoingStartTime = new Date();
+        } else if (newStatus !== "ongoing" && todo.ongoingStartTime) {
+          updatedTodo.ongoingStartTime = undefined;
         }
-        return todo;
-      }),
-    );
+
+        if (newStatus === "done" && !todo.completedAt) {
+          updatedTodo.completedAt = new Date();
+        } else if (newStatus !== "done" && todo.completedAt) {
+          updatedTodo.completedAt = undefined;
+        }
+        addOrUpdateTodo(updatedTodo); // Update in DB
+        return updatedTodo;
+      }
+      return todo;
+    });
+    setTodos(updatedTodos);
     toast.info("Status updated!");
   };
 
-  const deleteTodo = (id: string) => {
-    setTodos(todos.filter((todo: TodoItem) => todo.id !== id));
+  const deleteTodo = async (id: string) => {
+    await deleteTodoFromDB(id);
+    setTodos((prevTodos) => prevTodos.filter((todo: TodoItem) => todo.id !== id));
     toast.error("Todo deleted!");
   };
 
@@ -256,46 +251,53 @@ const TodoApp = () => {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setTodos([...todos]);
+      setTodos([...todos]); // Trigger re-render to update elapsed time
     }, 1000);
 
     return () => clearInterval(interval);
   }, [todos]);
 
-  const addTag = () => {
+  const addTag = async () => {
     if (newTag.trim() && !tags.includes(newTag.trim())) {
-      setTags([...tags, newTag.trim()]);
+      const tagToAdd = { name: newTag.trim() };
+      await addOrUpdateTag(tagToAdd);
+      setTags((prevTags) => [...prevTags, newTag.trim()]);
       setNewTag("");
       toast.success(`Tag "${newTag.trim()}" added!`);
     }
   };
 
-  const removeTag = (tagToRemove: string) => {
+  const removeTag = async (tagToRemove: string) => {
     if (
       window.confirm(
         `Are you sure you want to delete the tag "${tagToRemove}"? This will remove it from all todos.`,
       )
     ) {
-      setTags(tags.filter((t: string) => t !== tagToRemove));
-      setTodos(
-        todos.map((todo: TodoItem) => ({
-          ...todo,
-          tag: todo.tag === tagToRemove ? undefined : todo.tag,
-        })),
-      );
+      await deleteTagFromDB(tagToRemove);
+      setTags((prevTags) => prevTags.filter((t: string) => t !== tagToRemove));
+      const updatedTodos = todos.map((todo: TodoItem) => {
+        if (todo.tag === tagToRemove) {
+          const updatedTodo = { ...todo, tag: undefined };
+          addOrUpdateTodo(updatedTodo); // Update in DB
+          return updatedTodo;
+        }
+        return todo;
+      });
+      setTodos(updatedTodos);
       toast.success(`Tag "${tagToRemove}" deleted!`);
     }
   };
 
-  const removeTagFromTodo = (todoId: string) => {
-    setTodos(
-      todos.map((todo: TodoItem) => {
-        if (todo.id === todoId) {
-          return { ...todo, tag: undefined };
-        }
-        return todo;
-      }),
-    );
+  const removeTagFromTodo = async (todoId: string) => {
+    const updatedTodos = todos.map((todo: TodoItem) => {
+      if (todo.id === todoId) {
+        const updatedTodo = { ...todo, tag: undefined };
+        addOrUpdateTodo(updatedTodo); // Update in DB
+        return updatedTodo;
+      }
+      return todo;
+    });
+    setTodos(updatedTodos);
     toast.success(`Tag removed from todo!`);
   };
 
@@ -310,7 +312,7 @@ const TodoApp = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-[100rem] mx-auto">
         <h1 className="text-4xl font-bold text-center mb-8 text-purple-600">
           Todo List
         </h1>
@@ -771,4 +773,3 @@ const TodoApp = () => {
 };
 
 export default TodoApp;
-
