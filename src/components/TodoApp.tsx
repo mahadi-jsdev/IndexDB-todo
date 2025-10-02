@@ -447,7 +447,7 @@ const TodoApp = () => {
                 To Do ({filteredTodos("todo").length})
               </CardTitle>
             </CardHeader>
-            <ScrollArea className="h-[550px] rounded-md border">
+            <ScrollArea className="h-[580px] rounded-md border">
               <CardContent className="p-4 space-y-3">
                 {filteredTodos("todo").map((todo: TodoItem) => (
                   <div
@@ -515,7 +515,7 @@ const TodoApp = () => {
                 Planned ({filteredTodos("planned").length})
               </CardTitle>
             </CardHeader>
-            <ScrollArea className="h-[550px] rounded-md border">
+            <ScrollArea className="h-[580px] rounded-md border">
               <CardContent className="p-4 space-y-3">
                 {filteredTodos("planned").map((todo: TodoItem) => (
                   <div
@@ -592,7 +592,7 @@ const TodoApp = () => {
                 Ongoing ({filteredTodos("ongoing").length})
               </CardTitle>
             </CardHeader>
-            <ScrollArea className="h-[550px] rounded-md border">
+            <ScrollArea className="h-[580px] rounded-md border">
               <CardContent className="p-4 space-y-3">
                 {filteredTodos("ongoing").map((todo: TodoItem) => (
                   <div
@@ -675,7 +675,7 @@ const TodoApp = () => {
                 Done ({filteredTodos("done").length})
               </CardTitle>
             </CardHeader>
-            <ScrollArea className="h-[550px] rounded-md border">
+            <ScrollArea className="h-[580px] rounded-md border">
               <CardContent className="p-4 space-y-3">
                 {filteredTodos("done").map((todo: TodoItem) => (
                   <div
