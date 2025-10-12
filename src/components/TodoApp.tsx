@@ -1,31 +1,35 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import {
-  Plus,
-  Trash2,
-  Play,
-  CheckCircle,
-  Clock,
-  ImageIcon,
-  X,
-  Tag,
-  ListTodo,
-} from "lucide-react";
-import { toast } from "sonner";
-import Image from "next/image";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
-  getAllTodos,
-  addOrUpdateTodo,
-  deleteTodoFromDB,
-  getAllTags,
   addOrUpdateTag,
+  addOrUpdateTodo,
   deleteTagFromDB,
+  deleteTodoFromDB,
+  exportData,
+  getAllTags,
+  getAllTodos,
+  importData,
 } from "@/lib/indexedDB"; // Import IndexedDB utilities
+import {
+  CheckCircle,
+  Clock,
+  Download,
+  ImageIcon,
+  ListTodo,
+  Play,
+  Plus,
+  Tag,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import Image from "next/image";
+import React, { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 interface TodoItem {
   id: string;
@@ -158,7 +162,7 @@ const TodoApp = () => {
 
   const updateStatus = async (
     id: string,
-    newStatus: "todo" | "planned" | "ongoing" | "done",
+    newStatus: "todo" | "planned" | "ongoing" | "done"
   ) => {
     const updatedTodos = todos.map((todo: TodoItem) => {
       if (todo.id === id) {
@@ -186,7 +190,9 @@ const TodoApp = () => {
 
   const deleteTodo = async (id: string) => {
     await deleteTodoFromDB(id);
-    setTodos((prevTodos) => prevTodos.filter((todo: TodoItem) => todo.id !== id));
+    setTodos((prevTodos) =>
+      prevTodos.filter((todo: TodoItem) => todo.id !== id)
+    );
     toast.error("Todo deleted!");
   };
 
@@ -270,7 +276,7 @@ const TodoApp = () => {
   const removeTag = async (tagToRemove: string) => {
     if (
       window.confirm(
-        `Are you sure you want to delete the tag "${tagToRemove}"? This will remove it from all todos.`,
+        `Are you sure you want to delete the tag "${tagToRemove}"? This will remove it from all todos.`
       )
     ) {
       await deleteTagFromDB(tagToRemove);
@@ -310,6 +316,78 @@ const TodoApp = () => {
     return todos.filter((todo: TodoItem) => todo.tag === tag).length;
   };
 
+  const handleExport = async () => {
+    try {
+      const data = await exportData();
+      const blob = new Blob([data], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `todo-backup-${
+        new Date().toISOString().split("T")[0]
+      }.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("Data exported successfully!");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export data.");
+    }
+  };
+
+  const handleImport = () => {
+    // Show confirmation dialog
+    if (todos.length > 0 || tags.length > 0) {
+      const confirmed = window.confirm(
+        "Importing data will replace all existing todos and tags. This action cannot be undone. Are you sure you want to continue?"
+      );
+      if (!confirmed) return;
+    }
+
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const result = await importData(text);
+
+        if (result.success) {
+          // Reload data from IndexedDB
+          const savedTodos = await getAllTodos();
+          const parsedTodos = savedTodos.map((todo: any) => ({
+            ...todo,
+            createdAt: new Date(todo.createdAt),
+            ongoingStartTime: todo.ongoingStartTime
+              ? new Date(todo.ongoingStartTime)
+              : undefined,
+            completedAt: todo.completedAt
+              ? new Date(todo.completedAt)
+              : undefined,
+            tag: todo.tag || undefined,
+          }));
+          setTodos(parsedTodos);
+
+          const savedTags = await getAllTags();
+          setTags(savedTags);
+
+          toast.success(result.message);
+        } else {
+          toast.error(result.message);
+        }
+      } catch (error) {
+        console.error("Import error:", error);
+        toast.error("Failed to import data.");
+      }
+    };
+    input.click();
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4">
       <div className="max-w-[100rem] mx-auto">
@@ -324,7 +402,9 @@ const TodoApp = () => {
               ref={inputRef}
               value={newTodo}
               onChange={(e) => setNewTodo(e.target.value)}
-              placeholder={`Type your todo or paste an image (Ctrl+V)... ${selectedTag ? `[Tag: ${selectedTag}]` : ""}`}
+              placeholder={`Type your todo or paste an image (Ctrl+V)... ${
+                selectedTag ? `[Tag: ${selectedTag}]` : ""
+              }`}
               className="pr-10"
               onKeyPress={(e) => e.key === "Enter" && addTodo()}
               onPaste={handlePaste}
@@ -351,13 +431,33 @@ const TodoApp = () => {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Tags</h2>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowTagManager(!showTagManager)}
-            >
-              {showTagManager ? "Hide Manager" : "Manage Tags"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                className="flex items-center gap-1"
+              >
+                <Download className="w-4 h-4" />
+                Export
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleImport}
+                className="flex items-center gap-1"
+              >
+                <Upload className="w-4 h-4" />
+                Import
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTagManager(!showTagManager)}
+              >
+                {showTagManager ? "Hide Manager" : "Manage Tags"}
+              </Button>
+            </div>
           </div>
 
           {showTagManager && (
