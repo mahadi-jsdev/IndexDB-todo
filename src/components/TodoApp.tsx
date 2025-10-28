@@ -848,7 +848,7 @@ const TodoApp = () => {
       {/* Fullscreen Image Modal */}
       {fullscreenImage && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 w-screen h-screen bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
           onClick={() => setFullscreenImage(null)}
         >
           <div className="relative max-w-4xl max-h-full">
@@ -861,8 +861,8 @@ const TodoApp = () => {
             <Image
               src={fullscreenImage}
               alt="Fullscreen view"
-              width={800}
-              height={600}
+              width={1920}
+              height={1080}
               className="max-w-full max-h-[90vh] object-contain"
             />
           </div>
