@@ -1,16 +1,19 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
-  addOrUpdateTag,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import {
   addOrUpdateTodo,
-  deleteTagFromDB,
   deleteTodoFromDB,
   exportData,
-  getAllTags,
   getAllTodos,
   importData,
 } from "@/lib/indexedDB"; // Import IndexedDB utilities
@@ -22,13 +25,14 @@ import {
   ListTodo,
   Play,
   Plus,
-  Tag,
   Trash2,
   Upload,
   X,
 } from "lucide-react";
 import Image from "next/image";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 
 interface TodoItem {
@@ -39,22 +43,59 @@ interface TodoItem {
   ongoingStartTime?: Date;
   completedAt?: Date;
   image?: string;
-  tag?: string;
 }
+
+const markdownBaseClass =
+  "space-y-2 text-sm leading-relaxed break-words font-medium [&_ul]:list-disc [&_ul]:ml-5 [&_ol]:list-decimal [&_ol]:ml-5 [&_code]:rounded [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_pre]:bg-gray-900 [&_pre]:text-white [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_a]:text-purple-600 [&_a]:underline [&_a]:underline-offset-2";
 
 const TodoApp = () => {
   const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [newTodo, setNewTodo] = useState("");
   const [isPastingImage, setIsPastingImage] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
-  const [tags, setTags] = useState<string[]>([]);
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [newTag, setNewTag] = useState("");
-  const [showTagManager, setShowTagManager] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [expandedTodo, setExpandedTodo] = useState<TodoItem | null>(null);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const renderMarkdown = (content: string, extraClass = "") => {
+    if (!content.trim()) {
+      return (
+        <p className={`text-sm italic text-gray-400 ${extraClass}`}>
+          No description provided.
+        </p>
+      );
+    }
+
+    return (
+      <div className={`${markdownBaseClass} ${extraClass}`}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            a: ({ node, ...props }) => (
+              <a {...props} target="_blank" rel="noreferrer" />
+            ),
+            img: ({ node, ...props }) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                {...props}
+                className={`my-3 max-h-60 w-full rounded-lg object-cover ${
+                  props.className || ""
+                }`}
+                alt={(props.alt as string) || "Todo image"}
+              />
+            ),
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
+    );
+  };
 
   useEffect(() => {
     const loadData = async () => {
+      setIsLoading(true);
       try {
         const savedTodos = await getAllTodos();
         const parsedTodos = savedTodos.map((todo: any) => ({
@@ -66,21 +107,42 @@ const TodoApp = () => {
           completedAt: todo.completedAt
             ? new Date(todo.completedAt)
             : undefined,
-          tag: todo.tag || undefined,
         }));
         setTodos(parsedTodos);
-
-        const savedTags = await getAllTags();
-        setTags(savedTags);
       } catch (error: any) {
         console.error("Error loading data from IndexedDB:", error);
         toast.error("Failed to load data.");
+      } finally {
+        setIsLoading(false);
       }
     };
     loadData();
   }, []);
 
-  // No need for a separate useEffect to save todos/tags,
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "i") {
+        console.log("clicked");
+        event.preventDefault();
+        setIsAddDialogOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
+
+  useEffect(() => {
+    if (!isAddDialogOpen) return;
+
+    const timeout = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 80);
+
+    return () => clearTimeout(timeout);
+  }, [isAddDialogOpen]);
+
+  // No need for a separate useEffect to save todos,
   // as each modification function will directly update IndexedDB.
 
   const handlePaste = async (e: React.ClipboardEvent) => {
@@ -116,7 +178,6 @@ const TodoApp = () => {
               status,
               createdAt: new Date(),
               image: imageDataUrl,
-              tag: selectedTag !== null ? selectedTag : undefined,
             };
 
             await addOrUpdateTodo(todo);
@@ -151,14 +212,34 @@ const TodoApp = () => {
       text: text.replace(/^(plan|going|done)\s+/i, ""),
       status,
       createdAt: new Date(),
-      tag: selectedTag !== null ? selectedTag : undefined,
     };
 
     await addOrUpdateTodo(todo);
     setTodos((prevTodos) => [...prevTodos, todo]);
     setNewTodo("");
     toast.success("Todo added!");
+    setIsAddDialogOpen(false);
   };
+
+  const handleNewTodoKeyDown = (
+    e: React.KeyboardEvent<HTMLTextAreaElement>
+  ) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      addTodo();
+    }
+  };
+
+  const handleAddDialogChange = (open: boolean) => {
+    setIsAddDialogOpen(open);
+    if (!open) {
+      setNewTodo("");
+      setIsPastingImage(false);
+    }
+  };
+
+  const openTodoDetails = (todo: TodoItem) => setExpandedTodo(todo);
+  const closeTodoDetails = () => setExpandedTodo(null);
 
   const updateStatus = async (
     id: string,
@@ -214,18 +295,18 @@ const TodoApp = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case "todo":
-        return "bg-blue-100 border-blue-300";
+        return "bg-blue-100 text-blue-700";
       case "planned":
-        return "bg-purple-100 border-purple-300";
+        return "bg-purple-100 text-purple-700";
       case "ongoing":
-        return "bg-yellow-100 border-yellow-300";
+        return "bg-yellow-100 text-yellow-800";
       case "done":
-        return "bg-green-100 border-green-300";
+        return "bg-green-100 text-green-700";
       default:
-        return "bg-gray-100 border-gray-300";
+        return "bg-gray-100 text-gray-700";
     }
   };
 
@@ -244,16 +325,73 @@ const TodoApp = () => {
     }
   };
 
-  const filteredTodos = (status: "todo" | "planned" | "ongoing" | "done") => {
-    if (!todos || !Array.isArray(todos)) return [];
+  const statusSequence: TodoItem["status"][] = [
+    "todo",
+    "planned",
+    "ongoing",
+    "done",
+  ];
 
-    return todos.filter((todo: TodoItem) => {
-      if (!todo) return false;
-      const statusMatch = todo.status === status;
-      const tagMatch = selectedTag ? todo.tag === selectedTag : true;
-      return statusMatch && tagMatch;
-    });
+  const cycleStatus = (currentStatus: TodoItem["status"]) => {
+    const currentIndex = statusSequence.indexOf(currentStatus);
+    const nextIndex =
+      currentIndex === -1 ? 0 : (currentIndex + 1) % statusSequence.length;
+    return statusSequence[nextIndex];
   };
+
+  const getStatusBorderClass = (status: TodoItem["status"]) => {
+    switch (status) {
+      case "todo":
+        return "border-blue-200";
+      case "planned":
+        return "border-purple-200";
+      case "ongoing":
+        return "border-yellow-200";
+      case "done":
+        return "border-green-200";
+      default:
+        return "border-gray-200";
+    }
+  };
+
+  const getStatusBackgroundClass = (status: TodoItem["status"]) => {
+    switch (status) {
+      case "todo":
+        return "bg-blue-50/80";
+      case "planned":
+        return "bg-purple-50/80";
+      case "ongoing":
+        return "bg-yellow-50/80";
+      case "done":
+        return "bg-green-50/80";
+      default:
+        return "bg-white/90";
+    }
+  };
+
+  const [statusFilter, setStatusFilter] = useState<TodoItem["status"] | "all">(
+    "all"
+  );
+
+  const filteredAndSortedTodos = useMemo(() => {
+    if (!todos || !Array.isArray(todos)) {
+      return [];
+    }
+
+    const statusFiltered =
+      statusFilter === "all"
+        ? todos
+        : todos.filter((todo) => todo.status === statusFilter);
+
+    return [...statusFiltered].sort((a, b) => {
+      if (statusFilter === "all") {
+        const statusDiff =
+          statusSequence.indexOf(a.status) - statusSequence.indexOf(b.status);
+        if (statusDiff !== 0) return statusDiff;
+      }
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
+  }, [todos, statusFilter]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -263,57 +401,9 @@ const TodoApp = () => {
     return () => clearInterval(interval);
   }, [todos]);
 
-  const addTag = async () => {
-    if (newTag.trim() && !tags.includes(newTag.trim())) {
-      const tagToAdd = { name: newTag.trim() };
-      await addOrUpdateTag(tagToAdd);
-      setTags((prevTags) => [...prevTags, newTag.trim()]);
-      setNewTag("");
-      toast.success(`Tag "${newTag.trim()}" added!`);
-    }
-  };
-
-  const removeTag = async (tagToRemove: string) => {
-    if (
-      window.confirm(
-        `Are you sure you want to delete the tag "${tagToRemove}"? This will remove it from all todos.`
-      )
-    ) {
-      await deleteTagFromDB(tagToRemove);
-      setTags((prevTags) => prevTags.filter((t: string) => t !== tagToRemove));
-      const updatedTodos = todos.map((todo: TodoItem) => {
-        if (todo.tag === tagToRemove) {
-          const updatedTodo = { ...todo, tag: undefined };
-          addOrUpdateTodo(updatedTodo); // Update in DB
-          return updatedTodo;
-        }
-        return todo;
-      });
-      setTodos(updatedTodos);
-      toast.success(`Tag "${tagToRemove}" deleted!`);
-    }
-  };
-
-  const removeTagFromTodo = async (todoId: string) => {
-    const updatedTodos = todos.map((todo: TodoItem) => {
-      if (todo.id === todoId) {
-        const updatedTodo = { ...todo, tag: undefined };
-        addOrUpdateTodo(updatedTodo); // Update in DB
-        return updatedTodo;
-      }
-      return todo;
-    });
-    setTodos(updatedTodos);
-    toast.success(`Tag removed from todo!`);
-  };
-
   const getCompletionTime = (completedAt?: Date): string => {
     if (!completedAt) return "";
     return `Completed: ${completedAt.toLocaleString()}`;
-  };
-
-  const getTagUsageCount = (tag: string): number => {
-    return todos.filter((todo: TodoItem) => todo.tag === tag).length;
   };
 
   const handleExport = async () => {
@@ -339,9 +429,9 @@ const TodoApp = () => {
 
   const handleImport = () => {
     // Show confirmation dialog
-    if (todos.length > 0 || tags.length > 0) {
+    if (todos.length > 0) {
       const confirmed = window.confirm(
-        "Importing data will replace all existing todos and tags. This action cannot be undone. Are you sure you want to continue?"
+        "Importing data will replace all existing todos. This action cannot be undone. Are you sure you want to continue?"
       );
       if (!confirmed) return;
     }
@@ -369,12 +459,8 @@ const TodoApp = () => {
             completedAt: todo.completedAt
               ? new Date(todo.completedAt)
               : undefined,
-            tag: todo.tag || undefined,
           }));
           setTodos(parsedTodos);
-
-          const savedTags = await getAllTags();
-          setTags(savedTags);
 
           toast.success(result.message);
         } else {
@@ -391,459 +477,354 @@ const TodoApp = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4">
       <div className="max-w-[100rem] mx-auto">
-        <h1 className="text-4xl font-bold text-center mb-8 text-purple-600">
-          Todo List
-        </h1>
-
-        {/* Add Todo Input */}
-        <div className="flex gap-2 mb-4">
-          <div className="flex-1 relative">
-            <Input
-              ref={inputRef}
-              value={newTodo}
-              onChange={(e) => setNewTodo(e.target.value)}
-              placeholder={`Type your todo or paste an image (Ctrl+V)... ${
-                selectedTag ? `[Tag: ${selectedTag}]` : ""
-              }`}
-              className="pr-10"
-              onKeyPress={(e) => e.key === "Enter" && addTodo()}
-              onPaste={handlePaste}
-            />
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-              <ImageIcon className="w-4 h-4 text-gray-400" />
-            </div>
+        {/* Add Todo CTA */}
+        <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-purple-100 bg-white/80 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-base font-semibold text-purple-700">
+              Need to capture a new idea?
+            </p>
+            <p className="text-sm text-gray-600">
+              Press <span className="font-semibold">Ctrl+I</span> (⌘+I on macOS)
+              or click below to open the quick-add dialog.
+            </p>
           </div>
           <Button
-            onClick={addTodo}
+            onClick={() => handleAddDialogChange(true)}
             className="bg-purple-600 hover:bg-purple-700"
-            disabled={isPastingImage}
           >
-            {isPastingImage ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-            ) : (
-              <Plus className="w-4 h-4 mr-2" />
-            )}
-            Add
+            <Plus className="mr-2 h-4 w-4" />
+            New Todo
           </Button>
         </div>
 
-        {/* Tags Section */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Tags</h2>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExport}
-                className="flex items-center gap-1"
-              >
-                <Download className="w-4 h-4" />
-                Export
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleImport}
-                className="flex items-center gap-1"
-              >
-                <Upload className="w-4 h-4" />
-                Import
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowTagManager(!showTagManager)}
-              >
-                {showTagManager ? "Hide Manager" : "Manage Tags"}
-              </Button>
-            </div>
-          </div>
+        <Dialog open={isAddDialogOpen} onOpenChange={handleAddDialogChange}>
+          <DialogContent className="max-w-3xl space-y-4">
+            <DialogHeader>
+              <DialogTitle>Add a new todo</DialogTitle>
+              <DialogDescription>
+                Supports Markdown, inline images (Ctrl+V), and Ctrl/Cmd+Enter to
+                save quickly.
+              </DialogDescription>
+            </DialogHeader>
 
-          {showTagManager && (
-            <div className="bg-white p-4 rounded-lg border mb-4">
-              <h3 className="font-medium mb-3">Tag Manager</h3>
-              {tags.length === 0 ? (
-                <p className="text-gray-500 text-sm">No tags created yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {tags.map((tag: string) => (
-                    <div
-                      key={tag}
-                      className="flex items-center justify-between p-2 bg-gray-50 rounded"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Tag className="w-4 h-4 text-gray-600" />
-                        <span className="font-medium">{tag}</span>
-                        <span className="text-xs text-gray-500">
-                          ({getTagUsageCount(tag)}{" "}
-                          {getTagUsageCount(tag) === 1 ? "todo" : "todos"})
-                        </span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeTag(tag)}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
+            <div className="space-y-3">
+              <div className="relative">
+                <Textarea
+                  ref={inputRef}
+                  value={newTodo}
+                  onChange={(e) => setNewTodo(e.target.value)}
+                  placeholder="Write your todo details..."
+                  className="min-h-[180px] pr-10"
+                  onKeyDown={handleNewTodoKeyDown}
+                  onPaste={handlePaste}
+                  spellCheck
+                  aria-label="New todo description"
+                  disabled={isPastingImage}
+                />
+                <div className="absolute right-3 top-3 text-gray-400">
+                  <ImageIcon className="w-4 h-4" />
+                </div>
+              </div>
+              {newTodo.trim() && (
+                <div className="rounded-lg border border-purple-100 bg-purple-50/50 p-4">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Preview
+                  </div>
+                  {renderMarkdown(newTodo)}
                 </div>
               )}
             </div>
-          )}
 
-          <div className="flex flex-wrap gap-2 mb-2">
-            <span className="font-medium">Filter by:</span>
-            <Button
-              variant={selectedTag === null ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSelectedTag(null)}
-              className="h-7"
-            >
-              All
-            </Button>
-            {tags &&
-              tags.map((tag: string) => (
-                <Button
-                  key={tag}
-                  variant={selectedTag === tag ? "default" : "outline"}
-                  size="sm"
-                  onClick={() =>
-                    setSelectedTag(tag === selectedTag ? null : tag)
-                  }
-                  className="h-7 flex items-center gap-1"
-                >
-                  <Tag className="w-3 h-3" />
-                  {tag}
-                </Button>
-              ))}
-          </div>
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                onClick={() => handleAddDialogChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={addTodo}
+                className="bg-purple-600 hover:bg-purple-700"
+                disabled={isPastingImage || !newTodo.trim()}
+              >
+                {isPastingImage ? (
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <Plus className="mr-2 h-4 w-4" />
+                )}
+                Add Todo
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-          <div className="flex gap-2">
-            <Input
-              value={newTag}
-              onChange={(e) => setNewTag(e.target.value)}
-              placeholder="Add new tag"
-              className="max-w-xs"
-              onKeyPress={(e) => e.key === "Enter" && addTag()}
-            />
-            <Button onClick={addTag} size="sm">
-              <Plus className="w-4 h-4 mr-1" />
-              Add Tag
-            </Button>
-          </div>
+        {/* Data Utilities */}
+        <div className="mb-6 flex flex-wrap gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            className="flex items-center gap-1"
+          >
+            <Download className="w-4 h-4" />
+            Export
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleImport}
+            className="flex items-center gap-1"
+          >
+            <Upload className="w-4 h-4" />
+            Import
+          </Button>
         </div>
 
-        {/* Todo Columns */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          {/* To Do Column */}
-          <Card className={getStatusColor("todo")}>
-            <CardHeader className="bg-blue-200">
-              <CardTitle className="text-blue-800 flex items-center gap-2">
-                <Plus className="w-5 h-5" />
-                To Do ({filteredTodos("todo").length})
-              </CardTitle>
-            </CardHeader>
-            <ScrollArea className="h-[580px] rounded-md border">
-              <CardContent className="p-4 space-y-3">
-                {filteredTodos("todo").map((todo: TodoItem) => (
-                  <div
-                    key={todo.id}
-                    className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm"
-                  >
-                    {todo.image && (
-                      <div
-                        className="mb-2 cursor-pointer"
-                        onClick={() => setFullscreenImage(todo.image!)}
-                      >
-                        <Image
-                          src={todo.image}
-                          alt="Todo image"
-                          width={200}
-                          height={150}
-                          className="w-full h-32 object-cover rounded-md"
-                        />
-                      </div>
-                    )}
-                    <p className="text-sm font-medium">{todo.text}</p>
+        {/* Todo Grid */}
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Todos</h2>
+              <p className="text-sm text-gray-500">
+                Click a status chip to cycle through states.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <button
+                type="button"
+                className={`flex items-center gap-1 rounded-full border px-3 py-1 transition ${
+                  statusFilter === "all"
+                    ? "border-purple-400 bg-purple-50 text-purple-700 shadow-sm"
+                    : "border-transparent bg-white text-gray-500 hover:border-purple-200 hover:text-purple-600"
+                }`}
+                onClick={() => setStatusFilter("all")}
+              >
+                All ({todos.length})
+              </button>
+              {statusSequence.map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setStatusFilter(status)}
+                  className={`flex items-center gap-1 rounded-full border px-3 py-1 transition ${
+                    statusFilter === status
+                      ? "border-purple-400 bg-purple-50 text-purple-700 shadow-sm"
+                      : "border-transparent bg-white text-gray-500 hover:border-purple-200 hover:text-purple-600"
+                  }`}
+                >
+                  {getStatusIcon(status)}
+                  <span className="capitalize">
+                    {status} (
+                    {todos.filter((todo) => todo.status === status).length})
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
 
-                    {/* Tags for todo */}
-                    {todo.tag && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center">
-                          {todo.tag}
-                          <X
-                            className="w-3 h-3 ml-1 cursor-pointer"
-                            onClick={() => removeTagFromTodo(todo.id)}
-                          />
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="flex gap-2 mt-2">
-                      <Button
-                        size="sm"
-                        onClick={() => updateStatus(todo.id, "planned")}
-                        className="bg-purple-500 hover:bg-purple-600"
-                      >
-                        <ListTodo className="w-3 h-3 mr-1" />
-                        Plan
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => deleteTodo(todo.id)}
-                        variant="destructive"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
+          {isLoading ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 2xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="flex flex-col gap-4 rounded-2xl border border-purple-100 bg-white/60 p-4 shadow-sm animate-pulse"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="h-6 w-20 rounded-full bg-purple-100/80" />
+                    <div className="h-3 w-16 rounded-full bg-gray-100" />
                   </div>
-                ))}
-              </CardContent>
-              <ScrollBar orientation="vertical" />
-            </ScrollArea>
-          </Card>
-
-          {/* Planned Column */}
-          <Card className={getStatusColor("planned")}>
-            <CardHeader className="bg-purple-200">
-              <CardTitle className="text-purple-800 flex items-center gap-2">
-                <ListTodo className="w-5 h-5" />
-                Planned ({filteredTodos("planned").length})
-              </CardTitle>
-            </CardHeader>
-            <ScrollArea className="h-[580px] rounded-md border">
-              <CardContent className="p-4 space-y-3">
-                {filteredTodos("planned").map((todo: TodoItem) => (
-                  <div
-                    key={todo.id}
-                    className="bg-white p-3 rounded-lg border border-purple-200 shadow-sm"
-                  >
-                    {todo.image && (
-                      <div
-                        className="mb-2 cursor-pointer"
-                        onClick={() => setFullscreenImage(todo.image!)}
-                      >
-                        <Image
-                          src={todo.image}
-                          alt="Todo image"
-                          width={200}
-                          height={150}
-                          className="w-full h-32 object-cover rounded-md"
-                        />
-                      </div>
-                    )}
-                    <p className="text-sm font-medium">{todo.text}</p>
-
-                    {/* Tags for planned */}
-                    {todo.tag && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full flex items-center">
-                          {todo.tag}
-                          <X
-                            className="w-3 h-3 ml-1 cursor-pointer"
-                            onClick={() => removeTagFromTodo(todo.id)}
-                          />
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="flex gap-2 mt-2">
-                      <Button
-                        size="sm"
-                        onClick={() => updateStatus(todo.id, "ongoing")}
-                        className="bg-yellow-500 hover:bg-yellow-600"
-                      >
-                        <Play className="w-3 h-3 mr-1" />
-                        Start
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => updateStatus(todo.id, "todo")}
-                        variant="outline"
-                        className="text-blue-500 border-blue-500 hover:bg-blue-50"
-                      >
-                        <Plus className="w-3 h-3 mr-1" />
-                        To Do
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => deleteTodo(todo.id)}
-                        variant="destructive"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
+                  <div className="h-24 w-full rounded-xl bg-gray-100/80" />
+                  <div className="space-y-2">
+                    <div className="h-3 w-full rounded-full bg-gray-100" />
+                    <div className="h-3 w-5/6 rounded-full bg-gray-100" />
+                    <div className="h-3 w-3/4 rounded-full bg-gray-100" />
                   </div>
-                ))}
-              </CardContent>
-              <ScrollBar orientation="vertical" />
-            </ScrollArea>
-          </Card>
+                  <div className="flex gap-2">
+                    <div className="h-6 w-16 rounded-full bg-gray-100" />
+                    <div className="h-6 w-20 rounded-full bg-gray-100" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredAndSortedTodos.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-purple-200 bg-white/80 p-10 text-center text-gray-500">
+              No todos match this filter yet. Add one above to get started!
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 2xl:grid-cols-3">
+              {filteredAndSortedTodos.map((todo) => (
+                <div
+                  key={todo.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openTodoDetails(todo)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openTodoDetails(todo);
+                    }
+                  }}
+                  className={`group relative flex flex-col rounded-2xl border ${getStatusBorderClass(
+                    todo.status
+                  )} ${getStatusBackgroundClass(
+                    todo.status
+                  )} p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-purple-300`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold capitalize transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${getStatusBadgeClass(
+                        todo.status
+                      )}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const nextStatus = cycleStatus(todo.status);
+                        updateStatus(todo.id, nextStatus);
+                      }}
+                    >
+                      {getStatusIcon(todo.status)}
+                      {todo.status}
+                    </button>
+                    <span className="text-xs text-gray-400">
+                      {todo.createdAt.toLocaleDateString()}
+                    </span>
+                  </div>
 
-          {/* Ongoing Column */}
-          <Card className={getStatusColor("ongoing")}>
-            <CardHeader className="bg-yellow-200">
-              <CardTitle className="text-yellow-800 flex items-center gap-2">
-                <Play className="w-5 h-5" />
-                Ongoing ({filteredTodos("ongoing").length})
-              </CardTitle>
-            </CardHeader>
-            <ScrollArea className="h-[580px] rounded-md border">
-              <CardContent className="p-4 space-y-3">
-                {filteredTodos("ongoing").map((todo: TodoItem) => (
-                  <div
-                    key={todo.id}
-                    className="bg-white p-3 rounded-lg border border-yellow-200 shadow-sm"
-                  >
-                    {todo.image && (
-                      <div
-                        className="mb-2 cursor-pointer"
-                        onClick={() => setFullscreenImage(todo.image!)}
-                      >
-                        <Image
-                          src={todo.image}
-                          alt="Todo image"
-                          width={200}
-                          height={150}
-                          className="w-full h-32 object-cover rounded-md"
-                        />
-                      </div>
-                    )}
-                    <p className="text-sm font-medium">{todo.text}</p>
+                  {todo.image && (
+                    <div
+                      className="mt-3 overflow-hidden rounded-xl border border-gray-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFullscreenImage(todo.image!);
+                      }}
+                    >
+                      <Image
+                        src={todo.image}
+                        alt="Todo image"
+                        width={400}
+                        height={250}
+                        className="h-40 w-full object-cover transition duration-200 group-hover:scale-[1.02]"
+                      />
+                    </div>
+                  )}
 
-                    {/* Tags for ongoing */}
-                    {todo.tag && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full flex items-center">
-                          {todo.tag}
-                          <X
-                            className="w-3 h-3 ml-1 cursor-pointer"
-                            onClick={() => removeTagFromTodo(todo.id)}
-                          />
-                        </span>
-                      </div>
-                    )}
+                  <div className="mt-3 text-sm text-gray-700">
+                    {renderMarkdown(todo.text)}
+                  </div>
 
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     {todo.ongoingStartTime && (
-                      <div className="flex items-center gap-1 mt-1 text-xs text-yellow-600">
-                        <Clock className="w-3 h-3" />
-                        <span>{getElapsedTime(todo.ongoingStartTime)}</span>
-                      </div>
+                      <span className="flex items-center gap-1 rounded-full bg-yellow-50 px-2 py-1 text-[11px] font-medium text-yellow-700">
+                        <Clock className="h-3 w-3" />
+                        {getElapsedTime(todo.ongoingStartTime)}
+                      </span>
                     )}
-                    <div className="flex gap-2 mt-2">
-                      <Button
-                        size="sm"
-                        onClick={() => updateStatus(todo.id, "done")}
-                        className="bg-green-500 hover:bg-green-600"
-                      >
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Complete
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => updateStatus(todo.id, "planned")}
-                        variant="outline"
-                        className="text-purple-500 border-purple-500 hover:bg-purple-50"
-                      >
-                        <ListTodo className="w-3 h-3 mr-1" />
-                        Plan
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => deleteTodo(todo.id)}
-                        variant="destructive"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-              <ScrollBar orientation="vertical" />
-            </ScrollArea>
-          </Card>
-
-          {/* Done Column */}
-          <Card className={getStatusColor("done")}>
-            <CardHeader className="bg-green-200">
-              <CardTitle className="text-green-800 flex items-center gap-2">
-                <CheckCircle className="w-5 h-5" />
-                Done ({filteredTodos("done").length})
-              </CardTitle>
-            </CardHeader>
-            <ScrollArea className="h-[580px] rounded-md border">
-              <CardContent className="p-4 space-y-3">
-                {filteredTodos("done").map((todo: TodoItem) => (
-                  <div
-                    key={todo.id}
-                    className="bg-white p-3 rounded-lg border border-green-200 shadow-sm"
-                  >
-                    {todo.image && (
-                      <div
-                        className="mb-2 cursor-pointer"
-                        onClick={() => setFullscreenImage(todo.image!)}
-                      >
-                        <Image
-                          src={todo.image}
-                          alt="Todo image"
-                          width={200}
-                          height={150}
-                          className="w-full h-32 object-cover rounded-md"
-                        />
-                      </div>
-                    )}
-                    <p className="text-sm font-medium text-green-600">
-                      {todo.text}
-                    </p>
-
-                    {/* Tags for done */}
-                    {todo.tag && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center">
-                          {todo.tag}
-                          <X
-                            className="w-3 h-3 ml-1 cursor-pointer"
-                            onClick={() => removeTagFromTodo(todo.id)}
-                          />
-                        </span>
-                      </div>
-                    )}
-
                     {todo.completedAt && (
-                      <div className="text-xs text-green-600 mt-1">
+                      <span className="flex items-center gap-1 rounded-full bg-green-50 px-2 py-1 text-[11px] font-medium text-green-700">
+                        <CheckCircle className="h-3 w-3" />
                         {getCompletionTime(todo.completedAt)}
-                      </div>
+                      </span>
                     )}
-
-                    <div className="flex gap-2 mt-2">
-                      <Button
-                        size="sm"
-                        onClick={() => updateStatus(todo.id, "todo")}
-                        className="bg-blue-500 hover:bg-blue-600"
-                      >
-                        <Plus className="w-3 h-3 mr-1" />
-                        Reopen
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => deleteTodo(todo.id)}
-                        variant="destructive"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
                   </div>
-                ))}
-              </CardContent>
-              <ScrollBar orientation="vertical" />
-            </ScrollArea>
-          </Card>
+
+                  <div className="mt-4 flex items-center justify-between">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-transparent text-xs text-purple-600 hover:border-purple-200 hover:bg-purple-50"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openTodoDetails(todo);
+                      }}
+                    >
+                      Details
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="text-red-500 hover:bg-red-50"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteTodo(todo.id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Fullscreen Todo Modal */}
+      {expandedTodo && (
+        <div
+          className="fixed inset-0 z-50 flex h-screen w-screen items-center justify-center bg-black/70 p-4"
+          onClick={closeTodoDetails}
+        >
+          <div
+            className="relative w-full max-w-4xl rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="absolute right-4 top-4 rounded-full bg-gray-100 p-2 text-gray-600 transition hover:bg-gray-200"
+              onClick={closeTodoDetails}
+              aria-label="Close todo details"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${getStatusBadgeClass(
+                  expandedTodo.status
+                )}`}
+              >
+                {expandedTodo.status}
+              </span>
+              <span className="text-xs text-gray-500">
+                Created {expandedTodo.createdAt.toLocaleString()}
+              </span>
+            </div>
+            <div className="mb-4 grid gap-2 text-sm text-gray-600 sm:grid-cols-2">
+              {expandedTodo.ongoingStartTime && (
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-yellow-600" />
+                  <span>
+                    In progress for{" "}
+                    {getElapsedTime(expandedTodo.ongoingStartTime)}
+                  </span>
+                </div>
+              )}
+              {expandedTodo.completedAt && (
+                <div className="flex items-center gap-2 text-green-700">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>{getCompletionTime(expandedTodo.completedAt)}</span>
+                </div>
+              )}
+            </div>
+            <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-2">
+              {expandedTodo.image && (
+                <Image
+                  src={expandedTodo.image}
+                  alt="Todo attachment"
+                  width={1200}
+                  height={800}
+                  className="h-auto max-h-[24rem] w-full cursor-pointer rounded-xl object-cover"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFullscreenImage(expandedTodo.image!);
+                  }}
+                />
+              )}
+              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4">
+                {renderMarkdown(expandedTodo.text, "text-base")}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Fullscreen Image Modal */}
       {fullscreenImage && (
