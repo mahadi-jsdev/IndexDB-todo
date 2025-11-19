@@ -357,15 +357,15 @@ const TodoApp = () => {
   const getStatusBackgroundClass = (status: TodoItem["status"]) => {
     switch (status) {
       case "todo":
-        return "bg-blue-50/80";
+        return "bg-blue-200/80";
       case "planned":
-        return "bg-purple-50/80";
+        return "bg-purple-200/80";
       case "ongoing":
-        return "bg-yellow-50/80";
+        return "bg-yellow-200/80";
       case "done":
-        return "bg-green-50/80";
+        return "bg-green-200/80";
       default:
-        return "bg-white/90";
+        return "bg-gray-100/90";
     }
   };
 
@@ -475,28 +475,8 @@ const TodoApp = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4">
+    <div className="min-h-screen bg-gray-900 p-4">
       <div className="max-w-[100rem] mx-auto">
-        {/* Add Todo CTA */}
-        <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-purple-100 bg-white/80 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-base font-semibold text-purple-700">
-              Need to capture a new idea?
-            </p>
-            <p className="text-sm text-gray-600">
-              Press <span className="font-semibold">Ctrl+I</span> (⌘+I on macOS)
-              or click below to open the quick-add dialog.
-            </p>
-          </div>
-          <Button
-            onClick={() => handleAddDialogChange(true)}
-            className="bg-purple-600 hover:bg-purple-700"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            New Todo
-          </Button>
-        </div>
-
         <Dialog open={isAddDialogOpen} onOpenChange={handleAddDialogChange}>
           <DialogContent className="max-w-3xl space-y-4">
             <DialogHeader>
@@ -525,14 +505,6 @@ const TodoApp = () => {
                   <ImageIcon className="w-4 h-4" />
                 </div>
               </div>
-              {/* {newTodo.trim() && (
-                <div className="rounded-lg border border-purple-100 bg-purple-50/50 p-4">
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Preview
-                  </div>
-                  {renderMarkdown(newTodo)}
-                </div>
-              )} */}
             </div>
 
             <DialogFooter className="gap-2">
@@ -584,7 +556,7 @@ const TodoApp = () => {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold">Todos</h2>
+              <h2 className="text-lg text-white font-semibold">Todos</h2>
               <p className="text-sm text-gray-500">
                 Click a status chip to cycle through states.
               </p>
@@ -651,7 +623,7 @@ const TodoApp = () => {
               No todos match this filter yet. Add one above to get started!
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 2xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 2xl:grid-cols-4">
               {filteredAndSortedTodos.map((todo) => (
                 <div
                   key={todo.id}
@@ -664,7 +636,7 @@ const TodoApp = () => {
                       openTodoDetails(todo);
                     }
                   }}
-                  className={`group relative flex flex-col rounded-2xl border ${getStatusBorderClass(
+                  className={`group relative flex flex-col max-h-fit rounded-2xl border ${getStatusBorderClass(
                     todo.status
                   )} ${getStatusBackgroundClass(
                     todo.status
@@ -685,7 +657,7 @@ const TodoApp = () => {
                       {getStatusIcon(todo.status)}
                       {todo.status}
                     </button>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-900">
                       {todo.createdAt.toLocaleDateString()}
                     </span>
                   </div>
@@ -708,7 +680,7 @@ const TodoApp = () => {
                     </div>
                   )}
 
-                  <div className="mt-3 text-sm text-gray-700">
+                  <div className="mt-3 text-lg text-black font-medium">
                     {renderMarkdown(todo.text)}
                   </div>
 
@@ -727,28 +699,17 @@ const TodoApp = () => {
                     )}
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-transparent text-xs text-purple-600 hover:border-purple-200 hover:bg-purple-50"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openTodoDetails(todo);
-                      }}
-                    >
-                      Details
-                    </Button>
+                  <div className="mt-4 flex items-end justify-end">
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="text-red-500 hover:bg-red-50"
+                      className="text-red-700 hover:text-red-500"
                       onClick={(e) => {
                         e.stopPropagation();
                         deleteTodo(todo.id);
                       }}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="!h-5 !w-5" />
                     </Button>
                   </div>
                 </div>
