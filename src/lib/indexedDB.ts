@@ -1,74 +1,82 @@
 "use client";
 
-import { IDBPDatabase, openDB } from "idb";
+const BASE_URL = "/api/todos";
+const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
 
-const DB_NAME = "todo-app-db";
-const DB_VERSION = 1;
-const TODO_STORE_NAME = "todos";
-const TAG_STORE_NAME = "tags";
+const jsonHeaders = {
+  "Content-Type": "application/json",
+};
 
-let db: IDBPDatabase | null = null;
+const normalizeTodo = (todo: any) => ({
+  ...todo,
+  id: todo._id ?? todo.id,
+});
 
-async function initDB() {
-  if (!db) {
-    db = await openDB(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(TODO_STORE_NAME)) {
-          db.createObjectStore(TODO_STORE_NAME, { keyPath: "id" });
-        }
-        if (!db.objectStoreNames.contains(TAG_STORE_NAME)) {
-          db.createObjectStore(TAG_STORE_NAME, { keyPath: "name" }); // Tags will have a 'name' property as key
-        }
-      },
-    });
+async function handleResponse(response: Response) {
+  if (!response.ok) {
+    let message = "Request failed";
+    try {
+      const data = await response.json();
+      message = data?.message ?? message;
+    } catch (_error) {
+      // no-op
+    }
+    throw new Error(message);
   }
-  return db;
-}
 
-export async function addOrUpdateTodo(todo: any) {
-  const db = await initDB();
-  return db.put(TODO_STORE_NAME, todo);
-}
+  if (response.status === 204) {
+    return null;
+  }
 
-export async function getTodo(id: string) {
-  const db = await initDB();
-  return db.get(TODO_STORE_NAME, id);
+  return response.json();
 }
 
 export async function getAllTodos() {
-  const db = await initDB();
-  return db.getAll(TODO_STORE_NAME);
+  const response = await fetch(BASE_URL, {
+    cache: "no-store",
+  });
+  const todos = await handleResponse(response);
+  return Array.isArray(todos) ? todos.map(normalizeTodo) : [];
+}
+
+export async function addOrUpdateTodo(todo: any) {
+  const payload = {
+    text: todo.text,
+    status: todo.status ?? "todo",
+    createdAt: todo.createdAt,
+    ongoingStartTime: todo.ongoingStartTime,
+    completedAt: todo.completedAt,
+    image: todo.image,
+  };
+
+  const isExistingTodo =
+    typeof todo.id === "string" && OBJECT_ID_REGEX.test(todo.id);
+
+  const response = await fetch(
+    isExistingTodo ? `${BASE_URL}/${todo.id}` : BASE_URL,
+    {
+      method: isExistingTodo ? "PUT" : "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify(payload),
+    }
+  );
+
+  const result = await handleResponse(response);
+  return normalizeTodo(result);
 }
 
 export async function deleteTodoFromDB(id: string) {
-  const db = await initDB();
-  return db.delete(TODO_STORE_NAME, id);
+  const response = await fetch(`${BASE_URL}/${id}`, {
+    method: "DELETE",
+  });
+  await handleResponse(response);
 }
 
-export async function addOrUpdateTag(tag: { name: string }) {
-  const db = await initDB();
-  return db.put(TAG_STORE_NAME, tag);
-}
-
-export async function getAllTags() {
-  const db = await initDB();
-  const tags = await db.getAll(TAG_STORE_NAME);
-  return tags.map((tag) => tag.name); // Return just the tag names
-}
-
-export async function deleteTagFromDB(name: string) {
-  const db = await initDB();
-  return db.delete(TAG_STORE_NAME, name);
-}
-
-// Export all data to JSON
 export async function exportData() {
   const todos = await getAllTodos();
-  const tags = await getAllTags();
 
   const exportData = {
     todos,
-    tags,
     exportDate: new Date().toISOString(),
     version: "1.0",
   };
@@ -76,38 +84,24 @@ export async function exportData() {
   return JSON.stringify(exportData, null, 2);
 }
 
-// Import data from JSON
 export async function importData(jsonData: string) {
   try {
     const data = JSON.parse(jsonData);
 
-    // Validate the data structure
     if (!data.todos || !Array.isArray(data.todos)) {
       throw new Error("Invalid data format: todos array is missing");
     }
 
-    if (!data.tags || !Array.isArray(data.tags)) {
-      throw new Error("Invalid data format: tags array is missing");
-    }
+    const response = await fetch(`${BASE_URL}/import`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ todos: data.todos }),
+    });
 
-    // Clear existing data
-    const db = await initDB();
-    await db.clear(TODO_STORE_NAME);
-    await db.clear(TAG_STORE_NAME);
-
-    // Import todos
-    for (const todo of data.todos) {
-      await addOrUpdateTodo(todo);
-    }
-
-    // Import tags
-    for (const tag of data.tags) {
-      await addOrUpdateTag({ name: tag });
-    }
-
+    const result = await handleResponse(response);
     return {
       success: true,
-      message: `Imported ${data.todos.length} todos and ${data.tags.length} tags`,
+      message: result?.message ?? `Imported ${data.todos.length} todos`,
     };
   } catch (error) {
     console.error("Import error:", error);

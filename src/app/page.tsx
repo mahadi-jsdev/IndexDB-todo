@@ -16,7 +16,7 @@ import {
   exportData,
   getAllTodos,
   importData,
-} from "@/lib/indexedDB"; // Import IndexedDB utilities
+} from "@/lib/indexedDB"; // Mongo-backed todo API helpers
 import {
   CheckCircle,
   Clock,
@@ -30,7 +30,13 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
@@ -44,6 +50,18 @@ interface TodoItem {
   completedAt?: Date;
   image?: string;
 }
+
+const toTodoItem = (todo: any): TodoItem => ({
+  id: todo.id ?? todo._id ?? crypto.randomUUID(),
+  text: todo.text ?? "",
+  status: todo.status ?? "todo",
+  createdAt: todo.createdAt ? new Date(todo.createdAt) : new Date(),
+  ongoingStartTime: todo.ongoingStartTime
+    ? new Date(todo.ongoingStartTime)
+    : undefined,
+  completedAt: todo.completedAt ? new Date(todo.completedAt) : undefined,
+  image: todo.image,
+});
 
 const markdownBaseClass =
   "space-y-2 text-sm leading-relaxed break-words font-medium [&_ul]:list-disc [&_ul]:ml-5 [&_ol]:list-decimal [&_ol]:ml-5 [&_code]:rounded [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_pre]:bg-gray-900 [&_pre]:text-white [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_a]:text-purple-600 [&_a]:underline [&_a]:underline-offset-2";
@@ -93,31 +111,23 @@ const TodoApp = () => {
     );
   };
 
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        const savedTodos = await getAllTodos();
-        const parsedTodos = savedTodos.map((todo: any) => ({
-          ...todo,
-          createdAt: new Date(todo.createdAt),
-          ongoingStartTime: todo.ongoingStartTime
-            ? new Date(todo.ongoingStartTime)
-            : undefined,
-          completedAt: todo.completedAt
-            ? new Date(todo.completedAt)
-            : undefined,
-        }));
-        setTodos(parsedTodos);
-      } catch (error: any) {
-        console.error("Error loading data from IndexedDB:", error);
-        toast.error("Failed to load data.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadData();
+  const loadTodos = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const savedTodos = await getAllTodos();
+      const parsedTodos = savedTodos.map(toTodoItem);
+      setTodos(parsedTodos);
+    } catch (error: any) {
+      console.error("Error loading data from MongoDB:", error);
+      toast.error("Failed to load data.");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadTodos();
+  }, [loadTodos]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -143,7 +153,7 @@ const TodoApp = () => {
   }, [isAddDialogOpen]);
 
   // No need for a separate useEffect to save todos,
-  // as each modification function will directly update IndexedDB.
+  // as each modification function will directly update MongoDB via the API.
 
   const handlePaste = async (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
@@ -172,19 +182,25 @@ const TodoApp = () => {
               status = "done";
             }
 
-            const todo: TodoItem = {
-              id: Date.now().toString(),
+            const todoPayload = {
               text: text.replace(/^(plan|going|done)\s+/i, ""),
               status,
               createdAt: new Date(),
               image: imageDataUrl,
             };
 
-            await addOrUpdateTodo(todo);
-            setTodos((prevTodos) => [...prevTodos, todo]);
-            setNewTodo("");
-            setIsPastingImage(false);
-            toast.success("Image todo added!");
+            try {
+              const savedTodo = await addOrUpdateTodo(todoPayload);
+              const normalizedTodo = toTodoItem(savedTodo);
+              setTodos((prevTodos) => [...prevTodos, normalizedTodo]);
+              setNewTodo("");
+              toast.success("Image todo added!");
+            } catch (error) {
+              console.error("Error creating image todo:", error);
+              toast.error("Failed to add image todo.");
+            } finally {
+              setIsPastingImage(false);
+            }
           };
           reader.readAsDataURL(blob);
         }
@@ -207,18 +223,23 @@ const TodoApp = () => {
       status = "done";
     }
 
-    const todo: TodoItem = {
-      id: Date.now().toString(),
+    const todoPayload = {
       text: text.replace(/^(plan|going|done)\s+/i, ""),
       status,
       createdAt: new Date(),
     };
 
-    await addOrUpdateTodo(todo);
-    setTodos((prevTodos) => [...prevTodos, todo]);
-    setNewTodo("");
-    toast.success("Todo added!");
-    setIsAddDialogOpen(false);
+    try {
+      const savedTodo = await addOrUpdateTodo(todoPayload);
+      const normalizedTodo = toTodoItem(savedTodo);
+      setTodos((prevTodos) => [...prevTodos, normalizedTodo]);
+      setNewTodo("");
+      toast.success("Todo added!");
+      setIsAddDialogOpen(false);
+    } catch (error) {
+      console.error("Error creating todo:", error);
+      toast.error("Failed to add todo.");
+    }
   };
 
   const handleNewTodoKeyDown = (
@@ -245,36 +266,48 @@ const TodoApp = () => {
     id: string,
     newStatus: "todo" | "planned" | "ongoing" | "done"
   ) => {
-    const updatedTodos = todos.map((todo: TodoItem) => {
-      if (todo.id === id) {
-        const updatedTodo = { ...todo, status: newStatus };
+    const existingTodo = todos.find((todo) => todo.id === id);
+    if (!existingTodo) return;
 
-        if (newStatus === "ongoing" && !todo.ongoingStartTime) {
-          updatedTodo.ongoingStartTime = new Date();
-        } else if (newStatus !== "ongoing" && todo.ongoingStartTime) {
-          updatedTodo.ongoingStartTime = undefined;
-        }
+    const updatedTodo: TodoItem = { ...existingTodo, status: newStatus };
 
-        if (newStatus === "done" && !todo.completedAt) {
-          updatedTodo.completedAt = new Date();
-        } else if (newStatus !== "done" && todo.completedAt) {
-          updatedTodo.completedAt = undefined;
-        }
-        addOrUpdateTodo(updatedTodo); // Update in DB
-        return updatedTodo;
-      }
-      return todo;
-    });
-    setTodos(updatedTodos);
-    toast.info("Status updated!");
+    if (newStatus === "ongoing" && !existingTodo.ongoingStartTime) {
+      updatedTodo.ongoingStartTime = new Date();
+    } else if (newStatus !== "ongoing") {
+      updatedTodo.ongoingStartTime = undefined;
+    }
+
+    if (newStatus === "done" && !existingTodo.completedAt) {
+      updatedTodo.completedAt = new Date();
+    } else if (newStatus !== "done") {
+      updatedTodo.completedAt = undefined;
+    }
+
+    try {
+      const savedTodo = await addOrUpdateTodo(updatedTodo);
+      const normalizedTodo = toTodoItem(savedTodo);
+      setTodos((prevTodos) =>
+        prevTodos.map((todo) => (todo.id === id ? normalizedTodo : todo))
+      );
+      toast.info("Status updated!");
+    } catch (error) {
+      console.error("Error updating todo status:", error);
+      toast.error("Failed to update status.");
+      await loadTodos();
+    }
   };
 
   const deleteTodo = async (id: string) => {
-    await deleteTodoFromDB(id);
-    setTodos((prevTodos) =>
-      prevTodos.filter((todo: TodoItem) => todo.id !== id)
-    );
-    toast.error("Todo deleted!");
+    try {
+      await deleteTodoFromDB(id);
+      setTodos((prevTodos) =>
+        prevTodos.filter((todo: TodoItem) => todo.id !== id)
+      );
+      toast.error("Todo deleted!");
+    } catch (error) {
+      console.error("Error deleting todo:", error);
+      toast.error("Failed to delete todo.");
+    }
   };
 
   const getElapsedTime = (startTime?: Date): string => {
@@ -448,20 +481,7 @@ const TodoApp = () => {
         const result = await importData(text);
 
         if (result.success) {
-          // Reload data from IndexedDB
-          const savedTodos = await getAllTodos();
-          const parsedTodos = savedTodos.map((todo: any) => ({
-            ...todo,
-            createdAt: new Date(todo.createdAt),
-            ongoingStartTime: todo.ongoingStartTime
-              ? new Date(todo.ongoingStartTime)
-              : undefined,
-            completedAt: todo.completedAt
-              ? new Date(todo.completedAt)
-              : undefined,
-          }));
-          setTodos(parsedTodos);
-
+          await loadTodos();
           toast.success(result.message);
         } else {
           toast.error(result.message);

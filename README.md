@@ -20,6 +20,16 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Environment Variables
+
+The todo data now lives in MongoDB. Create a `.env.local` file (or update your deployment secrets) with:
+
+```
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/<database>?retryWrites=true&w=majority&appName=<app-name>
+```
+
+Restart the dev server after editing environment variables so the new connection string is picked up.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
