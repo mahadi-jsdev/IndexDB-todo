@@ -71,10 +71,43 @@ const TodoApp = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [newTodo, setNewTodo] = useState("");
   const [isPastingImage, setIsPastingImage] = useState(false);
+  const [isSavingTodo, setIsSavingTodo] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [updatingTodoIds, setUpdatingTodoIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [deletingTodoIds, setDeletingTodoIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [expandedTodo, setExpandedTodo] = useState<TodoItem | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const setTodoUpdatingState = useCallback((id: string, isPending: boolean) => {
+    setUpdatingTodoIds((prev) => {
+      const next = new Set(prev);
+      if (isPending) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const setTodoDeletingState = useCallback((id: string, isPending: boolean) => {
+    setDeletingTodoIds((prev) => {
+      const next = new Set(prev);
+      if (isPending) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  }, []);
 
   const renderMarkdown = (content: string, extraClass = "") => {
     if (!content.trim()) {
@@ -190,6 +223,7 @@ const TodoApp = () => {
             };
 
             try {
+              setIsSavingTodo(true);
               const savedTodo = await addOrUpdateTodo(todoPayload);
               const normalizedTodo = toTodoItem(savedTodo);
               setTodos((prevTodos) => [...prevTodos, normalizedTodo]);
@@ -200,6 +234,7 @@ const TodoApp = () => {
               toast.error("Failed to add image todo.");
             } finally {
               setIsPastingImage(false);
+              setIsSavingTodo(false);
             }
           };
           reader.readAsDataURL(blob);
@@ -230,6 +265,7 @@ const TodoApp = () => {
     };
 
     try {
+      setIsSavingTodo(true);
       const savedTodo = await addOrUpdateTodo(todoPayload);
       const normalizedTodo = toTodoItem(savedTodo);
       setTodos((prevTodos) => [...prevTodos, normalizedTodo]);
@@ -239,6 +275,8 @@ const TodoApp = () => {
     } catch (error) {
       console.error("Error creating todo:", error);
       toast.error("Failed to add todo.");
+    } finally {
+      setIsSavingTodo(false);
     }
   };
 
@@ -284,6 +322,7 @@ const TodoApp = () => {
     }
 
     try {
+      setTodoUpdatingState(id, true);
       const savedTodo = await addOrUpdateTodo(updatedTodo);
       const normalizedTodo = toTodoItem(savedTodo);
       setTodos((prevTodos) =>
@@ -294,11 +333,14 @@ const TodoApp = () => {
       console.error("Error updating todo status:", error);
       toast.error("Failed to update status.");
       await loadTodos();
+    } finally {
+      setTodoUpdatingState(id, false);
     }
   };
 
   const deleteTodo = async (id: string) => {
     try {
+      setTodoDeletingState(id, true);
       await deleteTodoFromDB(id);
       setTodos((prevTodos) =>
         prevTodos.filter((todo: TodoItem) => todo.id !== id)
@@ -307,6 +349,8 @@ const TodoApp = () => {
     } catch (error) {
       console.error("Error deleting todo:", error);
       toast.error("Failed to delete todo.");
+    } finally {
+      setTodoDeletingState(id, false);
     }
   };
 
@@ -440,7 +484,9 @@ const TodoApp = () => {
   };
 
   const handleExport = async () => {
+    if (isExporting) return;
     try {
+      setIsExporting(true);
       const data = await exportData();
       const blob = new Blob([data], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -457,10 +503,13 @@ const TodoApp = () => {
     } catch (error) {
       console.error("Export error:", error);
       toast.error("Failed to export data.");
+    } finally {
+      setIsExporting(false);
     }
   };
 
   const handleImport = () => {
+    if (isImporting) return;
     // Show confirmation dialog
     if (todos.length > 0) {
       const confirmed = window.confirm(
@@ -477,6 +526,7 @@ const TodoApp = () => {
       if (!file) return;
 
       try {
+        setIsImporting(true);
         const text = await file.text();
         const result = await importData(text);
 
@@ -489,6 +539,8 @@ const TodoApp = () => {
       } catch (error) {
         console.error("Import error:", error);
         toast.error("Failed to import data.");
+      } finally {
+        setIsImporting(false);
       }
     };
     input.click();
@@ -537,14 +589,14 @@ const TodoApp = () => {
               <Button
                 onClick={addTodo}
                 className="bg-purple-600 hover:bg-purple-700"
-                disabled={isPastingImage || !newTodo.trim()}
+                disabled={isPastingImage || isSavingTodo || !newTodo.trim()}
               >
-                {isPastingImage ? (
+                {isPastingImage || isSavingTodo ? (
                   <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 ) : (
                   <Plus className="mr-2 h-4 w-4" />
                 )}
-                Add Todo
+                {isSavingTodo ? "Saving..." : "Add Todo"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -557,18 +609,28 @@ const TodoApp = () => {
             size="sm"
             onClick={handleExport}
             className="flex items-center gap-1"
+            disabled={isExporting}
           >
-            <Download className="w-4 h-4" />
-            Export
+            {isExporting ? (
+              <div className="h-4 w-4 animate-spin rounded-full border border-current border-t-transparent" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            {isExporting ? "Exporting..." : "Export"}
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={handleImport}
             className="flex items-center gap-1"
+            disabled={isImporting}
           >
-            <Upload className="w-4 h-4" />
-            Import
+            {isImporting ? (
+              <div className="h-4 w-4 animate-spin rounded-full border border-current border-t-transparent" />
+            ) : (
+              <Upload className="w-4 h-4" />
+            )}
+            {isImporting ? "Importing..." : "Import"}
           </Button>
         </div>
 
@@ -668,14 +730,24 @@ const TodoApp = () => {
                       className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold capitalize transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${getStatusBadgeClass(
                         todo.status
                       )}`}
+                      disabled={
+                        updatingTodoIds.has(todo.id) ||
+                        deletingTodoIds.has(todo.id)
+                      }
                       onClick={(e) => {
                         e.stopPropagation();
                         const nextStatus = cycleStatus(todo.status);
                         updateStatus(todo.id, nextStatus);
                       }}
                     >
-                      {getStatusIcon(todo.status)}
-                      {todo.status}
+                      {updatingTodoIds.has(todo.id) ? (
+                        <div className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+                      ) : (
+                        getStatusIcon(todo.status)
+                      )}
+                      {updatingTodoIds.has(todo.id)
+                        ? "Updating..."
+                        : todo.status}
                     </button>
                     <span className="text-xs text-gray-900">
                       {todo.createdAt.toLocaleDateString()}
@@ -723,13 +795,18 @@ const TodoApp = () => {
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="text-red-700 hover:text-red-500"
+                      className="text-red-700 hover:text-red-500 disabled:opacity-60"
+                      disabled={deletingTodoIds.has(todo.id)}
                       onClick={(e) => {
                         e.stopPropagation();
                         deleteTodo(todo.id);
                       }}
                     >
-                      <Trash2 className="!h-5 !w-5" />
+                      {deletingTodoIds.has(todo.id) ? (
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      ) : (
+                        <Trash2 className="!h-5 !w-5" />
+                      )}
                     </Button>
                   </div>
                 </div>
